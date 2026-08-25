@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.output/
+.nuxt/
+.nitro/
+.cache/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+.idea/
+.vscode/
+*.log
+test-results/
+playwright-report/

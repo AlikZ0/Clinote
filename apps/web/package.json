@@ -1,0 +1,37 @@
+{
+  "name": "@clinote/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "build:e2e": "nuxt generate"
+  },
+  "dependencies": {
+    "@clinote/backup": "workspace:*",
+    "@clinote/config": "workspace:*",
+    "@clinote/crypto": "workspace:*",
+    "@clinote/shared": "workspace:*",
+    "@clinote/types": "workspace:*",
+    "dexie": "^4.4.5",
+    "nuxt": "^3.21.11",
+    "vue": "^3.5.41",
+    "vue-router": "^5.2.0"
+  },
+  "devDependencies": {
+    "@vite-pwa/nuxt": "^1.1.1",
+    "@vitest/coverage-v8": "^4.1.11",
+    "fake-indexeddb": "^6.2.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11",
+    "vue-tsc": "^3.3.11",
+    "workbox-core": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1"
+  }
+}

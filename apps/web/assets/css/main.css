@@ -1,0 +1,501 @@
+/**
+ * Clinote design system.
+ *
+ * Calm, clinical, legible at arm's length on a phone held in one hand while
+ * standing next to a patient. Every colour is a token, defined once in light
+ * and once in dark; nothing hard-codes a hex value outside this file.
+ */
+
+:root {
+  /* Neutrals: a slightly cool grey, so clinical photography looks right on it. */
+  --ink-950: #0b1220;
+  --ink-900: #111a2b;
+  --ink-800: #1b2740;
+  --ink-700: #33415c;
+  --ink-500: #64748b;
+  --ink-400: #94a3b8;
+  --ink-300: #cbd5e1;
+  --ink-200: #e2e8f0;
+  --ink-100: #f1f5f9;
+  --ink-50: #f8fafc;
+
+  /* Teal-leaning primary: reads as medical rather than corporate. */
+  --brand-600: #0e7490;
+  --brand-500: #0891b2;
+  --brand-400: #22a7c7;
+  --brand-100: #cffafe;
+
+  --positive-600: #15803d;
+  --positive-100: #dcfce7;
+  --caution-600: #b45309;
+  --caution-100: #fef3c7;
+  --critical-600: #be123c;
+  --critical-100: #ffe4e6;
+
+  /* Semantic surface tokens. */
+  --page: var(--ink-50);
+  --surface: #ffffff;
+  --surface-sunken: var(--ink-100);
+  --surface-raised: #ffffff;
+  --border: var(--ink-200);
+  --border-strong: var(--ink-300);
+  --text: var(--ink-900);
+  --text-muted: var(--ink-500);
+  --text-inverted: #ffffff;
+
+  --accent: var(--brand-500);
+  --accent-strong: var(--brand-600);
+  --accent-soft: var(--brand-100);
+  --ok: var(--positive-600);
+  --ok-soft: var(--positive-100);
+  --warn: var(--caution-600);
+  --warn-soft: var(--caution-100);
+  --danger: var(--critical-600);
+  --danger-soft: var(--critical-100);
+
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 6%);
+  --shadow: 0 2px 8px rgb(15 23 42 / 8%);
+  --shadow-lg: 0 12px 32px rgb(15 23 42 / 12%);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tap: 44px;
+
+  --font:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans Armenian', 'Noto Sans', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: var(--ink-950);
+    --surface: var(--ink-900);
+    --surface-sunken: #0d1526;
+    --surface-raised: var(--ink-800);
+    --border: #24334d;
+    --border-strong: #33415c;
+    --text: var(--ink-100);
+    --text-muted: var(--ink-400);
+
+    --accent: var(--brand-400);
+    --accent-strong: var(--brand-400);
+    --accent-soft: #0b3a48;
+    --ok: #4ade80;
+    --ok-soft: #0f2f1e;
+    --warn: #fbbf24;
+    --warn-soft: #3a2a08;
+    --danger: #fb7185;
+    --danger-soft: #3b1220;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+    --shadow: 0 2px 10px rgb(0 0 0 / 45%);
+    --shadow-lg: 0 16px 40px rgb(0 0 0 / 55%);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 650;
+}
+
+h2 {
+  font-size: 1.0625rem;
+  font-weight: 620;
+}
+
+h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+a {
+  color: var(--accent-strong);
+  text-underline-offset: 0.2em;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+/* One visible focus style everywhere, including for keyboard-only users. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .button,
+  .list-item,
+  .nav__link {
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      transform 120ms ease;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Layout
+   --------------------------------------------------------------------------- */
+
+.stack {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+}
+
+.stack--tight {
+  gap: var(--space-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.card > h2 {
+  margin: 0 0 var(--space-3);
+}
+
+.card > h2:only-child,
+.card .stack > h2 {
+  margin-bottom: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Text
+   --------------------------------------------------------------------------- */
+
+.hint {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.alert {
+  border: 1px solid var(--danger);
+  background: var(--danger-soft);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  color: var(--danger);
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 620;
+}
+
+/* ---------------------------------------------------------------------------
+   Badges
+   --------------------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 0.75rem;
+  font-weight: 550;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  white-space: nowrap;
+  width: fit-content;
+}
+
+.badge--ok {
+  color: var(--ok);
+  border-color: transparent;
+  background: var(--ok-soft);
+}
+
+.badge--warn {
+  color: var(--warn);
+  border-color: transparent;
+  background: var(--warn-soft);
+  text-decoration: none;
+}
+
+.badge--accent {
+  color: var(--accent-strong);
+  border-color: transparent;
+  background: var(--accent-soft);
+}
+
+/* ---------------------------------------------------------------------------
+   Buttons
+   --------------------------------------------------------------------------- */
+
+.button {
+  min-height: var(--tap);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.button:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.button--primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--text-inverted);
+  box-shadow: var(--shadow-sm);
+}
+
+.button--primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.button--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--surface);
+}
+
+.button--danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+.button--quiet {
+  border-color: transparent;
+  background: transparent;
+}
+
+.button--block {
+  width: 100%;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------------------
+   Forms
+   --------------------------------------------------------------------------- */
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field > span:first-child,
+.field > legend {
+  font-size: 0.8125rem;
+  font-weight: 550;
+  color: var(--text-muted);
+}
+
+.input,
+.textarea,
+select {
+  min-height: var(--tap);
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  width: 100%;
+}
+
+.input:focus,
+.textarea:focus,
+select:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.textarea {
+  min-height: 6.5rem;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  min-height: var(--tap);
+}
+
+.checkbox input {
+  margin-top: 0.3rem;
+  min-width: 1.15rem;
+  min-height: 1.15rem;
+  accent-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------------------
+   Lists
+   --------------------------------------------------------------------------- */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 58px;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.list-item:hover,
+button.list-item:hover {
+  border-color: var(--accent);
+  background: var(--surface-sunken);
+}
+
+.list-item__title {
+  font-weight: 600;
+}
+
+.list-item__meta {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: var(--space-6) var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}
+
+/* ---------------------------------------------------------------------------
+   Definition lists — used by every detail panel
+   --------------------------------------------------------------------------- */
+
+.details {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, auto) 1fr;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.details dt {
+  color: var(--text-muted);
+}
+
+.details dd {
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Files
+   --------------------------------------------------------------------------- */
+
+.grid-files {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: var(--space-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Utilities
+   --------------------------------------------------------------------------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.wrap {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Clinote">
+  <rect width="512" height="512" rx="113" fill="#0f172a" />
+  <path
+    d="M 352 158 A 123 123 0 1 0 352 354"
+    fill="none"
+    stroke="#0ea5e9"
+    stroke-width="59"
+    stroke-linecap="round"
+  />
+</svg>

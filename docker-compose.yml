@@ -1,0 +1,69 @@
+# Local development dependencies (docs/deployment.md §2).
+#
+# Ports are deliberately non-default so this cannot collide with another
+# PostgreSQL already running on the machine.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clinote_postgres
+    environment:
+      POSTGRES_USER: clinote
+      POSTGRES_PASSWORD: clinote
+      POSTGRES_DB: clinote
+    ports:
+      - '5433:5432'
+    volumes:
+      - clinote_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U clinote -d clinote']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # S3-compatible object storage for encrypted backups (docs/backup.md §4).
+  minio:
+    image: minio/minio:latest
+    container_name: clinote_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: clinote
+      MINIO_ROOT_PASSWORD: clinote-secret
+    ports:
+      - '9100:9000'
+      - '9101:9001'
+    volumes:
+      - clinote_miniodata:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Creates the bucket once, then exits.
+  minio_init:
+    image: minio/mc:latest
+    container_name: clinote_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 clinote clinote-secret &&
+      mc mb --ignore-existing local/clinote-backups &&
+      mc anonymous set none local/clinote-backups
+      "
+
+  # Catches outgoing email in development (docs/notifications.md §5).
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: clinote_mailpit
+    ports:
+      - '1125:1025' # SMTP
+      - '8125:8025' # web UI
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+volumes:
+  clinote_pgdata:
+  clinote_miniodata:
