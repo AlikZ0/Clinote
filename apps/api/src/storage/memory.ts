@@ -178,14 +178,24 @@ export function createMemoryStores(): Stores {
       return subscription ? { ...subscription } : null
     },
     async upsert(subscription) {
-      // Store by both userId (legacy) and organizationId (Phase 18+)
-      if (subscription.userId) {
-        subscriptions.set(subscription.userId, { ...subscription })
+      // Reuse the id of the row this write lands on, so a second write to the
+      // same owner updates rather than creating a rival record.
+      const existing =
+        (subscription.organizationId
+          ? subscriptionsByOrg.get(subscription.organizationId)
+          : null) ?? (subscription.userId ? subscriptions.get(subscription.userId) : null)
+
+      const record: SubscriptionRecord = {
+        ...subscription,
+        id: subscription.id ?? existing?.id ?? randomUUID(),
+        organizationId: subscription.organizationId ?? existing?.organizationId ?? null,
       }
-      if (subscription.organizationId) {
-        subscriptionsByOrg.set(subscription.organizationId, { ...subscription })
-      }
-      return { ...subscription }
+
+      // Indexed by both owners: the account path (Phase 13) and the
+      // organization path (Phase 18+) read the same row.
+      if (record.userId) subscriptions.set(record.userId, { ...record })
+      if (record.organizationId) subscriptionsByOrg.set(record.organizationId, { ...record })
+      return { ...record }
     },
   }
 
@@ -661,7 +671,8 @@ export function createMemoryStores(): Stores {
     },
 
     async countMembers(organizationId) {
-      return [...orgMembers.values()].filter((member) => member.organizationId === organizationId).length
+      return [...orgMembers.values()].filter((member) => member.organizationId === organizationId)
+        .length
     },
 
     async putMember(member) {

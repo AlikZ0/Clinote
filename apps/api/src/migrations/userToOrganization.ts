@@ -13,8 +13,8 @@
  * - I5: Separate billing (org_members) from data (workspace_members)
  */
 import { randomUUID } from 'node:crypto'
-import { AppError, nowIso } from '@clinote/shared'
-import type { Stores } from '../storage'
+import { nowIso } from '@clinote/shared'
+import type { Stores, UserRecord } from '../storage/ports'
 
 export interface MigrationProgress {
   totalUsers: number
@@ -61,8 +61,10 @@ export async function migrateUsersToOrganizations(
   }
 
   // Find users to migrate
-  const users = userIds ? await Promise.all(userIds.map(id => stores.users.findById(id))) : await stores.users.listAll?.() ?? []
-  const activeUsers = users.filter((u): u is any => u !== null && !u.deletedAt)
+  const users = userIds
+    ? await Promise.all(userIds.map((id) => stores.users.findById(id)))
+    : ((await stores.users.listAll?.()) ?? [])
+  const activeUsers = users.filter((u): u is UserRecord => u !== null && !u.deletedAt)
 
   progress.totalUsers = activeUsers.length
 
@@ -79,7 +81,7 @@ export async function migrateUsersToOrganizations(
 
       if (!dryRun) {
         // Create personal organization
-        const orgSlug = generateOrgSlug(user.email)
+        const orgSlug = await allocateOrgSlug(stores, user.email)
         const orgId = randomUUID()
 
         await stores.organizations.create({
@@ -109,39 +111,29 @@ export async function migrateUsersToOrganizations(
         progress.migratedOrganizations++
 
         // Migrate subscription if exists
-        const subscription = await stores.subscriptions.findByUserId?.(user.id)
+        const subscription = await stores.subscriptions.findByUserId(user.id)
         if (subscription) {
-          await stores.subscriptions.upsert({
-            id: subscription.id || randomUUID(),
-            userId: user.id,
-            organizationId: orgId, // Add org_id
-            planId: subscription.planId,
-            status: subscription.status,
-            currentPeriodStart: subscription.currentPeriodStart,
-            currentPeriodEnd: subscription.currentPeriodEnd,
-            cancelledAt: subscription.cancelledAt,
-            createdAt: subscription.createdAt,
-            updatedAt: now,
-          })
-
+          // Same row, now naming the organization as well. user_id stays for
+          // audit; the organization is what drives entitlements from here.
+          await stores.subscriptions.upsert({ ...subscription, organizationId: orgId })
           progress.migratedSubscriptions++
         }
 
-        // Link all user's workspaces to organization
-        const workspaces = await stores.workspaces.listForUser(user.id)
-        for (const workspace of workspaces) {
-          await stores.workspaces.update(workspace.id, {
-            organizationId: orgId,
-          })
+        // Link the workspaces this account owns. listForUser answers by
+        // membership, so using it here handed a colleague's practice to
+        // whichever member happened to be migrated last — a workspace's billing
+        // owner decided by iteration order.
+        for (const workspace of await ownedWorkspaces(stores, user.id)) {
+          await stores.workspaces.update(workspace.id, { organizationId: orgId })
           progress.migratedWorkspaces++
         }
       } else {
-        // Dry-run: just count
+        // Dry-run: count exactly what a real run would write, so the preview
+        // an operator approves is the preview they get.
         progress.migratedOrganizations++
-        progress.migratedSubscriptions++
+        if (await stores.subscriptions.findByUserId(user.id)) progress.migratedSubscriptions++
 
-        const workspaces = await stores.workspaces.listForUser(user.id)
-        progress.migratedWorkspaces += workspaces.length
+        progress.migratedWorkspaces += (await ownedWorkspaces(stores, user.id)).length
       }
     } catch (error) {
       progress.errors.push({
@@ -159,18 +151,54 @@ export async function migrateUsersToOrganizations(
 }
 
 /**
- * Generate organization slug from email.
- * Examples: "john.doe@example.com" → "john.doe", "alice@company.co" → "alice"
+ * The workspaces an account owns, as opposed to the ones it can merely open.
+ *
+ * A workspace belongs to exactly one organization, and the one that pays for it
+ * is its owner's — not that of every colleague invited into it.
  */
-function generateOrgSlug(email: string): string {
-  const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '-')
+async function ownedWorkspaces(stores: Stores, userId: string) {
+  const workspaces = await stores.workspaces.listForUser(userId)
+  return workspaces.filter((workspace) => workspace.ownerUserId === userId)
+}
 
-  // Ensure slug is valid (3-50 chars, alphanumeric + - and .)
-  if (base.length < 3) {
-    return `org-${base}`.slice(0, 50)
+/**
+ * The slug an organization would like, from the owner's email.
+ *
+ * `organizationSchema` allows `[a-z0-9-]` only, so dots and underscores become
+ * hyphens: an earlier version kept them and produced slugs its own schema
+ * rejected — including the "john.doe" the documentation gave as the example.
+ *
+ * Examples: "john.doe@example.com" → "john-doe", "alice+tag@company.co" → "alice-tag"
+ */
+function baseOrgSlug(email: string): string {
+  const local = email.split('@')[0] ?? email
+  const base = local
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  if (base.length < 3) return `org-${base}`.replace(/-+$/, '').slice(0, 50)
+  return base.slice(0, 50)
+}
+
+/**
+ * Claim a slug nobody else holds.
+ *
+ * `organizations.slug` is UNIQUE, and two accounts at different domains share a
+ * local part often enough — john@a.example and john@b.example both wanted
+ * "john". The second insert failed, the user was filed under `errors` and the
+ * migration still reported success. Suffix until the name is free.
+ */
+async function allocateOrgSlug(stores: Stores, email: string): Promise<string> {
+  const base = baseOrgSlug(email)
+  if (!(await stores.organizations.findBySlug(base))) return base
+
+  for (let suffix = 2; suffix < 1000; suffix++) {
+    const candidate = `${base.slice(0, 50 - String(suffix).length - 1)}-${suffix}`
+    if (!(await stores.organizations.findBySlug(candidate))) return candidate
   }
 
-  return base.slice(0, 50)
+  throw new Error(`Could not find a free organization slug for "${base}"`)
 }
 
 /**
@@ -199,20 +227,19 @@ export async function verifyMigration(stores: Stores): Promise<{
 
   // Check workspaces
   const workspaces = (await stores.workspaces.listAll?.()) ?? []
-  const workspacesWithoutOrg = workspaces.filter(w => !w || !w.organizationId).length
+  const workspacesWithoutOrg = workspaces.filter((w) => !w || !w.organizationId).length
 
   return { usersWithoutOrg, usersWithOrg, workspacesWithoutOrg }
 }
 
 /**
- * Rollback migration (for testing/recovery).
- * Removes organizations created during migration (marked as personal=true).
+ * Rolling the migration back is not implemented.
+ *
+ * It would mean deleting organizations, moving subscriptions back onto their
+ * users and unlinking workspaces — destructive work whose safety depends on
+ * knowing which organizations the migration itself created. Restore from the
+ * dump taken before the run instead (docs/MIGRATION_USERS_TO_ORGS.md).
+ *
+ * This function existed as a stub that reported `rolled: 0` and read, from a
+ * call site, exactly like a rollback that had found nothing to do.
  */
-export async function rollbackMigration(stores: Stores, dryRun = false): Promise<{ rolled: number }> {
-  let rolled = 0
-
-  // TODO: Implement if needed for development
-  // This would be high-risk in production anyway
-
-  return { rolled }
-}

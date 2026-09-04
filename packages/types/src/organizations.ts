@@ -67,8 +67,16 @@ export function canOrg(role: OrganizationRole, permission: OrganizationPermissio
  */
 export const organizationBrandingSchema = z.object({
   logoUrl: z.string().url().nullable().default(null),
-  primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().default(null),
-  secondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().default(null),
+  primaryColor: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .nullable()
+    .default(null),
+  secondaryColor: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .nullable()
+    .default(null),
   customDomain: z.string().min(3).max(253).nullable().default(null), // e.g., clinic.example.com
 })
 
@@ -80,13 +88,17 @@ export const organizationSettingsSchema = z.object({
   ssoProvider: z.enum(['google', 'azure', 'okta']).optional(),
   ssoClientId: z.string().optional(), // Never returned to client
   scimEnabled: z.boolean().default(false),
-  featureFlagOverrides: z.record(z.boolean()).default({}), // Per-org feature flags
+  featureFlagOverrides: z.record(z.string(), z.boolean()).default({}), // Per-org feature flags
 })
 
 export const organizationSchema = z.object({
   id: z.uuid(),
   name: z.string().trim().min(1).max(255),
-  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9-]+$/),
   role: organizationRoleSchema,
   branding: organizationBrandingSchema,
   createdAt: z.iso.datetime(),
@@ -103,12 +115,21 @@ export const organizationMemberSchema = z.object({
 
 export const createOrganizationRequestSchema = z.object({
   name: z.string().trim().min(1).max(255),
-  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9-]+$/),
 })
 
 export const updateOrganizationRequestSchema = z.object({
   name: z.string().trim().min(1).max(255).optional(),
-  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/).optional(),
+  slug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
   branding: organizationBrandingSchema.partial().optional(),
   settings: organizationSettingsSchema.partial().optional(),
 })
@@ -148,7 +169,7 @@ export const organizationAuditEventSchema = z.object({
   actorEmail: z.email().nullable(),
   resourceType: z.string().nullable(),
   resourceId: z.uuid().nullable(),
-  details: z.record(z.unknown()).nullable(),
+  details: z.record(z.string(), z.unknown()).nullable(),
   createdAt: z.iso.datetime(),
 })
 

@@ -26,6 +26,7 @@ pnpm migrate:users --verify
 ## 📊 Current Architecture
 
 ### Boundaries
+
 ```
 ┌─────────────────────────────┐
 │  Organization (billing)      │ ← Shared subscriptions, shared members
@@ -39,11 +40,13 @@ pnpm migrate:users --verify
 ### Roles
 
 **Organization**:
+
 - `owner` - Full control
 - `admin` - Manage members (no billing)
 - `billing` - View billing, can't manage members
 
 **Workspace**:
+
 - `owner` - Full control
 - `admin` - Manage members
 - `doctor` - Create/edit content
@@ -54,15 +57,15 @@ pnpm migrate:users --verify
 
 ## 📁 Key Files
 
-| File | Purpose | LOC |
-|------|---------|-----|
-| `PHASE_18_P0_PROGRESS.md` | Phase 18 implementation | - |
-| `PHASE_19_P0_PROGRESS.md` | Phase 19 P0 implementation | - |
-| `ARCHITECTURE_INDEX.md` | Complete file index | - |
-| `apps/api/src/organizations/routes.ts` | API endpoints | 430 |
-| `apps/api/src/migrations/userToOrganization.ts` | Migration service | 220 |
-| `apps/api/src/storage/ports.ts` | Type definitions | 500 |
-| `packages/types/src/organizations.ts` | Org types + schemas | 170 |
+| File                                            | Purpose                    | LOC |
+| ----------------------------------------------- | -------------------------- | --- |
+| `PHASE_18_P0_PROGRESS.md`                       | Phase 18 implementation    | -   |
+| `PHASE_19_P0_PROGRESS.md`                       | Phase 19 P0 implementation | -   |
+| `ARCHITECTURE_INDEX.md`                         | Complete file index        | -   |
+| `apps/api/src/organizations/routes.ts`          | API endpoints              | 430 |
+| `apps/api/src/migrations/userToOrganization.ts` | Migration service          | 220 |
+| `apps/api/src/storage/ports.ts`                 | Type definitions           | 500 |
+| `packages/types/src/organizations.ts`           | Org types + schemas        | 170 |
 
 ---
 
@@ -90,6 +93,7 @@ Invitations
 ## 💾 Database Schema Additions
 
 ### Organizations (Phase 18)
+
 ```sql
 organizations - billing/identity boundary
 organization_members - who's in the org
@@ -99,6 +103,7 @@ organization_metrics_daily - usage statistics
 ```
 
 ### Workspaces Update (Phase 19)
+
 ```sql
 ALTER TABLE workspaces ADD COLUMN organization_id UUID;
 CREATE INDEX idx_workspaces_organization_id ON workspaces(organization_id);
@@ -109,6 +114,7 @@ CREATE INDEX idx_workspaces_organization_id ON workspaces(organization_id);
 ## 🔐 Permission System
 
 ### Check Permission
+
 ```typescript
 import { canOrg } from '@clinote/types'
 
@@ -118,6 +124,7 @@ if (!canOrg(member.role, 'members.invite')) {
 ```
 
 ### Permissions List
+
 - `organization.manage` - Edit org settings
 - `members.invite` - Send invitations
 - `members.manage` - Change roles, remove
@@ -142,6 +149,7 @@ pnpm migrate:users --verify
 ```
 
 ### What Migration Does
+
 1. Creates personal org for each user
 2. Makes user the org owner
 3. Migrates subscription to org
@@ -171,6 +179,7 @@ interface Entitlements {
 ```
 
 ### Usage
+
 ```typescript
 const entitlement = await resolveOrganizationEntitlement(stores, orgId)
 
@@ -184,18 +193,19 @@ if (memberCount >= entitlement.limits.maxMembers) {
 
 ## 🛡️ Key Invariants
 
-| Invariant | Description | Status |
-|-----------|-------------|--------|
-| I3 | Admin can't access clinical data | ✅ |
-| I5 | Billing ≠ data separation | ✅ |
-| I7 | Plans from database | ✅ |
-| I8 | Workspace encryption unaffected | ✅ |
+| Invariant | Description                      | Status |
+| --------- | -------------------------------- | ------ |
+| I3        | Admin can't access clinical data | ✅     |
+| I5        | Billing ≠ data separation        | ✅     |
+| I7        | Plans from database              | ✅     |
+| I8        | Workspace encryption unaffected  | ✅     |
 
 ---
 
 ## ⚙️ Configuration
 
 ### Environment Variables
+
 ```
 DATABASE_URL=postgresql://user:pass@host/db
 JWT_SECRET=<your-secret>
@@ -205,6 +215,7 @@ TRUST_PROXY=0|1
 ```
 
 ### Defaults
+
 - Invite TTL: 72 hours
 - Org slug: 3-50 characters
 - Member roles: owner, admin, billing
@@ -215,6 +226,7 @@ TRUST_PROXY=0|1
 ## 🧪 Testing
 
 ### Run Tests
+
 ```bash
 pnpm test                    # All tests
 pnpm test organizations      # Just orgs
@@ -222,6 +234,7 @@ pnpm test --watch           # Watch mode
 ```
 
 ### Test Database
+
 ```bash
 createdb clinote_test
 pnpm migrate --env=test
@@ -232,19 +245,20 @@ pnpm test
 
 ## 📈 Performance Notes
 
-| Operation | Time | Notes |
-|-----------|------|-------|
-| List organizations | < 100ms | Indexed by user_id |
-| Get organization | < 50ms | Indexed by id |
-| List members | < 100ms | 100+ members |
-| Invite member | < 200ms | Email async |
-| Migrate users | ~1s/1000 | Depends on workspaces/user |
+| Operation          | Time     | Notes                      |
+| ------------------ | -------- | -------------------------- |
+| List organizations | < 100ms  | Indexed by user_id         |
+| Get organization   | < 50ms   | Indexed by id              |
+| List members       | < 100ms  | 100+ members               |
+| Invite member      | < 200ms  | Email async                |
+| Migrate users      | ~1s/1000 | Depends on workspaces/user |
 
 ---
 
 ## 🐛 Troubleshooting
 
 ### Migration Fails
+
 ```bash
 # Check what would happen
 pnpm migrate:users --dry-run
@@ -257,6 +271,7 @@ pg_restore --dbname=clinote backup.sql
 ```
 
 ### API Not Responding
+
 ```bash
 # Check health
 curl http://localhost:3000/health/live
@@ -269,14 +284,15 @@ psql $DATABASE_URL -c "SELECT 1"
 ```
 
 ### Permissions Denied
+
 ```typescript
 // Check membership
 const member = await stores.organizations.findMember(orgId, userId)
-if (!member) console.error("Not a member!")
+if (!member) console.error('Not a member!')
 
 // Check role permission
 const allowed = canOrg(member.role, 'permission.name')
-if (!allowed) console.error("Insufficient permission!")
+if (!allowed) console.error('Insufficient permission!')
 ```
 
 ---
@@ -302,6 +318,7 @@ if (!allowed) console.error("Insufficient permission!")
 ## 🎯 Development Workflow
 
 ### New Feature in Org API
+
 1. Add type to `packages/types/src/organizations.ts`
 2. Add method to storage port in `storage/ports.ts`
 3. Implement in memory storage
@@ -311,12 +328,14 @@ if (!allowed) console.error("Insufficient permission!")
 7. Add test
 
 ### Adding a New Permission
+
 1. Add to `OrganizationPermission` enum in types
 2. Update `canOrg()` permission check
 3. Update permission table in docs
 4. Add to routes that need it
 
 ### Fixing a Bug
+
 1. Write test that reproduces it
 2. Fix code
 3. Verify test passes
@@ -341,23 +360,23 @@ if (!allowed) console.error("Insufficient permission!")
 
 ## 📞 Quick Contacts
 
-| Topic | Person | Notes |
-|-------|--------|-------|
-| Architecture | - | See ARCHITECTURE_INDEX.md |
-| Database | - | See schema in migrations/ |
-| Types | - | See packages/types/src/organizations.ts |
-| API Routes | - | See apps/api/src/organizations/routes.ts |
+| Topic        | Person | Notes                                    |
+| ------------ | ------ | ---------------------------------------- |
+| Architecture | -      | See ARCHITECTURE_INDEX.md                |
+| Database     | -      | See schema in migrations/                |
+| Types        | -      | See packages/types/src/organizations.ts  |
+| API Routes   | -      | See apps/api/src/organizations/routes.ts |
 
 ---
 
 ## 🔄 Version History
 
-| Phase | Scope | Status | Date |
-|-------|-------|--------|------|
-| 18 P0 | Org tables, API, storage | ✅ Complete | Sep 2026 |
-| 19 P0 | User→Org migration service | ✅ Complete | Sep 2026 |
-| 19 P1 | Admin UI, real metrics | 📋 Planning | Sep 2026 |
-| 19 P2+ | Audit logging, white-label | 📅 Planned | Oct 2026 |
+| Phase  | Scope                      | Status      | Date     |
+| ------ | -------------------------- | ----------- | -------- |
+| 18 P0  | Org tables, API, storage   | ✅ Complete | Sep 2026 |
+| 19 P0  | User→Org migration service | ✅ Complete | Sep 2026 |
+| 19 P1  | Admin UI, real metrics     | 📋 Planning | Sep 2026 |
+| 19 P2+ | Audit logging, white-label | 📅 Planned  | Oct 2026 |
 
 ---
 
@@ -377,12 +396,14 @@ if (!allowed) console.error("Insufficient permission!")
 ## 🎓 Learning Path
 
 **New to architecture?**
+
 1. Read [ARCHITECTURE_INDEX.md](./ARCHITECTURE_INDEX.md)
 2. Check [docs/architecture.md](./docs/architecture.md)
 3. Review [PHASE_18_P0_PROGRESS.md](./PHASE_18_P0_PROGRESS.md)
 4. Look at actual code in `apps/api/src/organizations/`
 
 **Ready to develop?**
+
 1. Pick a task from [PHASE_19_P1_CHECKLIST.md](./PHASE_19_P1_CHECKLIST.md)
 2. Review related API/storage methods
 3. Write tests first (TDD)

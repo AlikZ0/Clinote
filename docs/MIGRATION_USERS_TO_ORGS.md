@@ -7,10 +7,12 @@
 This migration converts existing users to organizations, establishing the new multi-tenant billing and identity boundary. Each user becomes the owner of a personal organization, and their workspaces are linked to that organization.
 
 ### Timeline
+
 - **Before migration**: Users own subscriptions and workspaces directly
 - **After migration**: Organizations own subscriptions and workspaces; users are org members
 
 ### Key Changes
+
 - Users become members of personal organizations
 - Subscriptions move from `user_id` → `organization_id`
 - Workspaces link to `organization_id`
@@ -21,11 +23,13 @@ This migration converts existing users to organizations, establishing the new mu
 ## Prerequisites
 
 1. **Database**: PostgreSQL with latest migrations applied
+
    ```bash
    pnpm migrate  # Run all pending migrations
    ```
 
 2. **Environment**: DATABASE_URL must be set
+
    ```bash
    export DATABASE_URL="postgresql://user:pass@localhost/clinote"
    ```
@@ -49,6 +53,7 @@ pnpm migrate:users --dry-run
 ```
 
 **Expected output:**
+
 ```
 🧪 Running migration in DRY-RUN mode (no changes will be written)
 
@@ -68,6 +73,7 @@ pnpm migrate:users --dry-run
 ```
 
 **Review the numbers:**
+
 - Do all users have organizations?
 - Do subscription and workspace counts look right?
 - Are there any errors?
@@ -81,6 +87,7 @@ pnpm migrate:users --confirm
 ```
 
 **This will:**
+
 1. Create personal organizations for all users
 2. Add users as org owners
 3. Migrate subscriptions to org_id
@@ -97,6 +104,7 @@ pnpm migrate:users --verify
 ```
 
 **Expected output (success):**
+
 ```
 📊 Verifying migration status...
 
@@ -107,6 +115,7 @@ pnpm migrate:users --verify
 ```
 
 **If problems found:**
+
 ```
 📊 Verifying migration status...
 
@@ -142,21 +151,25 @@ pnpm migrate:users --verify
 ## What Each Phase Does
 
 ### Phase 1: Migration Service ✅ (Complete)
+
 - Converts users to organizations
 - Migrates subscriptions
 - Links workspaces
 - **Status**: Ready for deployment
 
 ### Phase 2: Admin UI (Next)
+
 - Dashboard to manage organizations
 - Member invites and role management
 - Billing and subscription settings
 
 ### Phase 3: Real Metrics
+
 - Calculate actual storage usage
 - Enforce member limits per plan
 
 ### Phase 4: Audit Logging
+
 - Log organization-level changes
 - Separate from workspace audit
 
@@ -165,32 +178,42 @@ pnpm migrate:users --verify
 ## Frequently Asked Questions
 
 ### Q: Can I run migration on a production database?
+
 **A**: Yes, with proper precautions:
+
 1. Always dry-run first on production data
 2. Take a backup before running
 3. Run during low-traffic period
 4. Have rollback plan ready
 
 ### Q: What about existing org members who aren't the creator?
+
 **A**: They get added to the personal organization with appropriate roles (determined in Phase 2)
 
 ### Q: Will this break any existing API calls?
+
 **A**: No. The migration maintains backward compatibility:
+
 - Subscriptions check both `user_id` and `organization_id`
 - All existing APIs continue to work
 - The entitlements layer handles both paths
 
 ### Q: What if a user already has an organization?
+
 **A**: They're skipped (counted in "Skipped" results). No duplicates created.
 
 ### Q: How long does migration take?
+
 **A**: ~1-10 seconds per 1000 users
+
 - Example: 10,000 users ≈ 30-60 seconds
 
 ### Q: Can I run this multiple times?
+
 **A**: Yes. Running a second time will skip users who already have orgs.
 
 ### Q: What about deleted users?
+
 **A**: They're ignored (not migrated).
 
 ---
@@ -200,6 +223,7 @@ pnpm migrate:users --verify
 ### Logs to Watch For
 
 After migration, check API logs for:
+
 - `Error: organization not found` - Indicates database inconsistency
 - `subscription org_id mismatch` - Rare, indicates data corruption
 
@@ -221,16 +245,17 @@ If migration fails or you need help:
 
 From email address (guaranteed unique):
 
-| Email | Slug |
-|-------|------|
-| john.doe@example.com | john.doe |
+| Email                     | Slug        |
+| ------------------------- | ----------- |
+| john.doe@example.com      | john.doe    |
 | alice.smith@company.co.uk | alice.smith |
-| a@short.io | org-a |
-| test+tag@test.com | test-tag |
+| a@short.io                | org-a       |
+| test+tag@test.com         | test-tag    |
 
 ### Database Changes
 
 New column added to workspaces:
+
 ```sql
 ALTER TABLE workspaces ADD COLUMN organization_id UUID REFERENCES organizations(id);
 CREATE INDEX idx_workspaces_organization_id ON workspaces(organization_id);
@@ -261,6 +286,7 @@ CREATE INDEX idx_workspaces_organization_id ON workspaces(organization_id);
 ### What Changes for Developers
 
 1. **Entitlements**: Now support both `userId` and `organizationId`
+
    ```typescript
    const entitlement = await resolveOrganizationEntitlement(stores, orgId)
    ```

@@ -17,6 +17,7 @@ import {
   inviteOrganizationMemberRequestSchema,
   changeOrganizationRoleRequestSchema,
   canOrg,
+  type OrganizationPermission,
   type OrganizationRole,
 } from '@clinote/types'
 import { z } from 'zod'
@@ -24,7 +25,7 @@ import type { Env } from '../env'
 import { resolveOrganizationEntitlement } from '../entitlements'
 import type { EmailSender } from '../notifications/senders'
 import { createRequireAuth, requireAuthContext } from '../plugins/authenticate'
-import type { Stores } from '../storage'
+import type { OrganizationRecord, Stores } from '../storage/ports'
 
 const INVITE_TTL_HOURS = 72
 
@@ -33,15 +34,21 @@ const hashToken = (token: string): string => createHash('sha256').update(token).
 /**
  * Require the caller to be a member of an organization with a specific permission.
  *
- * @throws AppError('forbidden') if not a member
- * @throws AppError('insufficient_permission') if role doesn't grant the permission
+ * Both failures are `forbidden`. "You are not a member" and "your role does not
+ * allow this" are the same 403 to the caller, and inventing a code outside
+ * ERROR_CODES made app.ts fall through to 500 — a permission check reported as a
+ * server fault, in the response and in the log alike.
+ *
+ * @throws AppError('not_found') if the organization does not exist
+ * @throws AppError('forbidden') if the caller is not a member, or their role
+ *   does not grant the permission
  */
 async function requireOrgMembership(
   stores: Stores,
   organizationId: string,
   userId: string,
-  permission?: string,
-): Promise<{ organization: any; role: OrganizationRole }> {
+  permission?: OrganizationPermission,
+): Promise<{ organization: OrganizationRecord; role: OrganizationRole }> {
   const org = await stores.organizations.findById(organizationId)
   if (!org) {
     throw new AppError('not_found', { message: 'Organization not found' })
@@ -54,8 +61,8 @@ async function requireOrgMembership(
     })
   }
 
-  if (permission && !canOrg(member.role, permission as any)) {
-    throw new AppError('insufficient_permission', {
+  if (permission && !canOrg(member.role, permission)) {
+    throw new AppError('forbidden', {
       message: `Your role (${member.role}) does not allow ${permission}`,
     })
   }
@@ -244,26 +251,36 @@ export async function registerOrganizationRoutes(
       const { id } = z.object({ id: z.uuid() }).parse(request.params)
       const body = inviteOrganizationMemberRequestSchema.parse(request.body)
 
-      await requireOrgMembership(stores, id, userId, 'members.invite')
+      const { organization } = await requireOrgMembership(stores, id, userId, 'members.invite')
 
       // Check plan allows additional members
       const entitlement = await resolveOrganizationEntitlement(stores, id)
       const members = await stores.organizations.countMembers(id)
-      const pending = (await stores.organizations.listPendingInvites(id)).length
+      const outstanding = await stores.organizations.listPendingInvites(id)
       const maxMembers = entitlement.limits.maxMembers ?? 0
-
-      if (members + pending >= maxMembers) {
+      // Pending invites count: otherwise the limit is trivially exceeded by
+      // inviting everyone at once and letting them accept later.
+      if (members + outstanding.length >= maxMembers) {
         throw new AppError('member_limit_reached', {
           message: 'This organization has reached the number of people its plan allows',
           details: { limit: maxMembers },
         })
       }
 
-      // Check if user already invited or member
-      const existing = await stores.organizations.findMember(id, userId)
-      if (existing) {
+      // The person being invited is the one named in the body. Checking the
+      // caller here asked whether the inviter was a member — which the
+      // permission check above has already established — so every invite was
+      // rejected and no invitee was ever actually checked.
+      const invitee = await stores.users.findByEmail(body.email)
+      if (invitee && (await stores.organizations.findMember(id, invitee.id))) {
         throw new AppError('validation_failed', {
-          message: 'User is already a member of this organization',
+          message: 'That person is already a member of this organization',
+        })
+      }
+
+      if (outstanding.some((candidate) => candidate.email === body.email)) {
+        throw new AppError('validation_failed', {
+          message: 'That person already has an invitation waiting',
         })
       }
 
@@ -284,10 +301,34 @@ export async function registerOrganizationRoutes(
         createdAt: now,
       })
 
-      // TODO: Send invitation email with token
+      // The organization name was chosen by the practice and the recipient was
+      // named by a colleague. Nothing about the org's clinical data goes into
+      // this message — org membership is billing, not records.
+      await options.email?.send({
+        to: body.email,
+        subject: `You have been invited to ${organization.name} on Clinote`,
+        text: [
+          `You have been invited to help manage "${organization.name}" on Clinote.`,
+          '',
+          `Open Clinote and enter this invitation code: ${token}`,
+          '',
+          `The invitation expires in ${INVITE_TTL_HOURS} hours.`,
+        ].join('\n'),
+      })
 
       reply.status(201)
-      return { invite: { id: invite.id, email: invite.email, role: invite.role } }
+      return {
+        invite: {
+          id: invite.id,
+          email: invite.email,
+          role: invite.role,
+          expiresAt: invite.expiresAt,
+        },
+        // Returned only where there is no mail server to read it from. Without
+        // this the token was hashed, stored and dropped, and no invitation
+        // could ever be accepted.
+        token: options.env.NODE_ENV === 'production' ? undefined : token,
+      }
     },
   )
 
@@ -347,43 +388,53 @@ export async function registerOrganizationRoutes(
    * Requires authentication. The authenticated user's email must match the
    * email the invitation was sent to.
    */
-  app.post('/api/v1/organizations/invites/:token/accept', { preHandler: requireAuth }, async (request, reply) => {
-    const { userId } = requireAuthContext(request)
-    const { token } = z.object({ token: z.string().min(32) }).parse(request.params)
-    const tokenHash = hashToken(token)
+  app.post(
+    '/api/v1/organizations/invites/:token/accept',
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const { userId } = requireAuthContext(request)
+      const { token } = z.object({ token: z.string().min(32) }).parse(request.params)
+      const tokenHash = hashToken(token)
 
-    const invite = await stores.organizations.findInviteByTokenHash(tokenHash)
-    if (!invite || invite.acceptedAt) {
-      throw new AppError('invalid_token', { message: 'This invitation is invalid or expired' })
-    }
+      const invite = await stores.organizations.findInviteByTokenHash(tokenHash)
+      if (!invite || invite.acceptedAt) {
+        throw new AppError('invite_invalid', {
+          message: 'This invitation is no longer valid. Ask for a new one.',
+        })
+      }
 
-    if (new Date(invite.expiresAt) < new Date()) {
-      throw new AppError('token_expired', { message: 'This invitation has expired' })
-    }
+      if (new Date(invite.expiresAt) < new Date()) {
+        throw new AppError('invite_invalid', {
+          message: 'This invitation has expired. Ask for a new one.',
+        })
+      }
 
-    const user = await stores.users.findById(userId)
-    if (user?.email !== invite.email) {
-      throw new AppError('forbidden', {
-        message: 'This invitation was sent to a different email address',
+      // Possession of the token is not enough: a forwarded invitation must not let
+      // a different person onto a practice's billing account.
+      const user = await stores.users.findById(userId)
+      if (!user || user.email !== invite.email) {
+        throw new AppError('invite_invalid', {
+          message: 'This invitation was issued to a different email address.',
+        })
+      }
+
+      const now = nowIso()
+      await stores.organizations.markInviteAccepted(invite.id, now)
+
+      // Add user as member
+      await stores.organizations.putMember({
+        organizationId: invite.organizationId,
+        userId,
+        role: invite.role,
+        invitedAt: invite.createdAt,
+        joinedAt: now,
       })
-    }
 
-    const now = nowIso()
-    await stores.organizations.markInviteAccepted(invite.id, now)
-
-    // Add user as member
-    await stores.organizations.putMember({
-      organizationId: invite.organizationId,
-      userId,
-      role: invite.role,
-      invitedAt: invite.invitedAt,
-      joinedAt: now,
-    })
-
-    reply.status(200)
-    return {
-      organization: { id: invite.organizationId },
-      message: 'You have joined the organization',
-    }
-  })
+      reply.status(200)
+      return {
+        organization: { id: invite.organizationId },
+        message: 'You have joined the organization',
+      }
+    },
+  )
 }

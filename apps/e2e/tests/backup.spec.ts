@@ -6,7 +6,7 @@
  * everything can get it back — encryption, upload, download, decryption and
  * the atomic swap, in one go.
  */
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { addClient, cardFor, newAccount, register, setUpEncryption, upgrade } from '../support/app'
 
 const PASSPHRASE = 'a passphrase for backups'
@@ -58,7 +58,7 @@ test('a wiped device gets its records back from a cloud backup', async ({ page }
  * After a wipe the device has no stored key, so it has to unlock again — the
  * passphrase is the only thing that survived, which is the design.
  */
-async function setUpEncryptionOrUnlock(page: import('@playwright/test').Page): Promise<void> {
+async function setUpEncryptionOrUnlock(page: Page): Promise<void> {
   await page.goto('/settings')
   const card = cardFor(page, 'Encryption')
   await card.getByLabel('Passphrase', { exact: true }).fill(PASSPHRASE)

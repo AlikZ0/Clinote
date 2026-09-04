@@ -11,9 +11,11 @@
  * Phase 19: Converts single-tenant (user) to multi-tenant (org) model.
  */
 
+/* eslint-disable no-console -- a CLI reports to stdout; that is its interface. */
+
 import { createStorage } from '../storage'
 import { migrateUsersToOrganizations, verifyMigration } from '../migrations/userToOrganization'
-import { getEnv } from '../env'
+import { loadEnv } from '../env'
 
 async function main() {
   const args = process.argv.slice(2)
@@ -41,7 +43,7 @@ Environment:
     process.exit(0)
   }
 
-  const env = getEnv()
+  const env = loadEnv()
   const storage = await createStorage(env)
   const { stores } = storage
 
@@ -64,7 +66,7 @@ Environment:
       } else {
         console.log('\n⚠️  Migration incomplete or issues found.')
       }
-      process.exit(0)
+      return
     }
 
     if (dryRun) {
@@ -76,7 +78,10 @@ Environment:
     const progress = await migrateUsersToOrganizations(stores, {
       dryRun,
       onProgress: (p) => {
-        if (p.processedUsers % Math.max(1, Math.floor(p.totalUsers / 10)) === 0 || p.processedUsers === p.totalUsers) {
+        if (
+          p.processedUsers % Math.max(1, Math.floor(p.totalUsers / 10)) === 0 ||
+          p.processedUsers === p.totalUsers
+        ) {
           const pct = Math.round((p.processedUsers / p.totalUsers) * 100)
           process.stdout.write(
             `\r  [${pct}%] ${p.processedUsers}/${p.totalUsers} users | ` +
@@ -111,13 +116,16 @@ Environment:
       console.log('\n✅ Migration complete!')
     }
 
-    process.exit(progress.errors.length > 0 ? 1 : 0)
+    if (progress.errors.length > 0) process.exitCode = 1
   } catch (error) {
     console.error('❌ Migration failed:', error)
-    process.exit(1)
+    process.exitCode = 1
   } finally {
     await storage.close()
   }
 }
 
-main()
+main().catch((error) => {
+  console.error('❌ Migration failed to start:', error)
+  process.exitCode = 1
+})

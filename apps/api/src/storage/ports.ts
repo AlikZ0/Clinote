@@ -72,6 +72,18 @@ export interface SubscriptionRecord {
   currentPeriodEnd: string | null
 }
 
+/**
+ * What a caller supplies to `upsert`.
+ *
+ * The store owns the id: a caller forced to invent one could not update the row
+ * it meant to update, which is exactly how billing started inserting a new row
+ * per event. An account-owned subscription names no organization and an
+ * organization-owned one names no user, so both owners are optional here and
+ * the store decides which row the write lands on.
+ */
+export type SubscriptionUpsert = Omit<SubscriptionRecord, 'id' | 'organizationId'> &
+  Partial<Pick<SubscriptionRecord, 'id' | 'organizationId'>>
+
 export interface UserStore {
   findById(id: string): Promise<UserRecord | null>
   findByEmail(email: string): Promise<UserRecord | null>
@@ -110,7 +122,7 @@ export interface SubscriptionStore {
   /** One live subscription per organization (Phase 18+). */
   findByOrganizationId(organizationId: string): Promise<SubscriptionRecord | null>
   /** One live subscription per account; billing (Phase 13) writes through this. */
-  upsert(subscription: SubscriptionRecord): Promise<SubscriptionRecord>
+  upsert(subscription: SubscriptionUpsert): Promise<SubscriptionRecord>
 }
 
 export interface UserKeysRecord {

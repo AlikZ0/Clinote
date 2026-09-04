@@ -10,26 +10,93 @@ then a manual pass over the main user flows (§89).
 
 ## Phases
 
-| #   | Phase                   | Exit criteria                                                                                                             |
-| --- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 0   | Architecture            | `docs/` complete: architecture, risks, schemas, backup spec, feature matrix, API contract, sync model, security model. ✅ |
-| 1   | Monorepo + tooling      | pnpm workspaces, TS project refs, ESLint/Prettier, Vitest, CI-ready scripts; `web` and `api` start and build. ✅          |
-| 2   | Local IndexedDB core    | Dexie schema v1, migrations, repositories, outbox writes, unit tests with fake-indexeddb. ✅                              |
-| 3   | Clients, works, files   | Full CRUD, paged lists, thumbnails, blob viewer, surname search. ✅                                                       |
-| 4   | PWA + offline           | Manifest, service worker, install prompts, persistent storage request, offline chip, iOS eviction mitigations (R1). ✅    |
-| 5   | Import / export         | Archive format v1, export, replace-import, merge-import, integrity validation. ✅                                         |
-| 6   | Appointments + calendar | Entity, day/week/month/agenda views, statuses, dashboard slices, Free gating UX. ✅                                       |
-| 7   | Authentication          | Register/login/reset, sessions, device registration, entitlement snapshot. ✅                                             |
-| 8   | Backend                 | Fastify app, Postgres schema, validation, rate limiting, plans catalog, health. ✅                                        |
-| 9   | Cloud sync              | Outbox drain, pull cursor, HLC resolution, conflict surface, device limits. ✅                                            |
-| 10  | Cloud backup            | init/complete upload protocol, storage accounting, history, health, restore. ✅                                           |
-| 11  | Encryption              | Backup encryption, recovery key, rotation, device enrollment UX. (Key hierarchy landed in Phase 9.) ✅                    |
-| 12  | Notifications           | Reminder schedules, push (content-free payload), email templates, preferences. ✅                                         |
-| 13  | Billing                 | BillingProvider abstraction, checkout, webhooks, entitlement transitions. ✅                                              |
-| 14  | Business / teams        | Workspaces, roles, permissions, members, audit log, shared workspace keys. ✅                                             |
-| 15  | Security hardening      | Threat model, executable pen-test checklist, dependency audit, redaction tests, CSP and response headers. ✅              |
-| 16  | Testing                 | Unit/integration/E2E per §79, mobile matrix per §80.                                                                      |
-| 17  | Deployment              | Environments, migrations, observability, restore drill.                                                                   |
+| #   | Phase                     | Exit criteria                                                                                                             |
+| --- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 0   | Architecture              | `docs/` complete: architecture, risks, schemas, backup spec, feature matrix, API contract, sync model, security model. ✅ |
+| 1   | Monorepo + tooling        | pnpm workspaces, TS project refs, ESLint/Prettier, Vitest, CI-ready scripts; `web` and `api` start and build. ✅          |
+| 2   | Local IndexedDB core      | Dexie schema v1, migrations, repositories, outbox writes, unit tests with fake-indexeddb. ✅                              |
+| 3   | Clients, works, files     | Full CRUD, paged lists, thumbnails, blob viewer, surname search. ✅                                                       |
+| 4   | PWA + offline             | Manifest, service worker, install prompts, persistent storage request, offline chip, iOS eviction mitigations (R1). ✅    |
+| 5   | Import / export           | Archive format v1, export, replace-import, merge-import, integrity validation. ✅                                         |
+| 6   | Appointments + calendar   | Entity, day/week/month/agenda views, statuses, dashboard slices, Free gating UX. ✅                                       |
+| 7   | Authentication            | Register/login/reset, sessions, device registration, entitlement snapshot. ✅                                             |
+| 8   | Backend                   | Fastify app, Postgres schema, validation, rate limiting, plans catalog, health. ✅                                        |
+| 9   | Cloud sync                | Outbox drain, pull cursor, HLC resolution, conflict surface, device limits. ✅                                            |
+| 10  | Cloud backup              | init/complete upload protocol, storage accounting, history, health, restore. ✅                                           |
+| 11  | Encryption                | Backup encryption, recovery key, rotation, device enrollment UX. (Key hierarchy landed in Phase 9.) ✅                    |
+| 12  | Notifications             | Reminder schedules, push (content-free payload), email templates, preferences. ✅                                         |
+| 13  | Billing                   | BillingProvider abstraction, checkout, webhooks, entitlement transitions. ✅                                              |
+| 14  | Business / teams          | Workspaces, roles, permissions, members, audit log, shared workspace keys. ✅                                             |
+| 15  | Security hardening        | Threat model, executable pen-test checklist, dependency audit, redaction tests, CSP and response headers. ✅              |
+| 16  | Testing                   | Unit/integration/E2E per §79, mobile matrix per §80.                                                                      |
+| 17  | Deployment                | Environments, migrations, observability, restore drill.                                                                   |
+| 18  | Organizations             | Billing and identity boundary above workspaces: schema, roles, members, invitations, org entitlements.                    |
+| 19  | Accounts to organizations | Every account gets a personal organization; subscriptions and workspaces move onto it. Admin UI and org metrics remain.   |
+
+### Still open in Phases 18 and 19
+
+Phases 18 and 19 were started before 16 and 17, against rule §89. Their server
+side is in place — organizations, roles, invitations, org entitlements and the
+account-to-organization migration all work and are covered by tests. What is
+not built:
+
+- **The admin UI.** There is no organization screen at all; `apps/web` does not
+  mention organizations. Everything in `PHASE_19_P1_CHECKLIST.md` — dashboard,
+  members, workspaces, settings, billing — is unstarted.
+- **Per-organization storage and device usage.** `resolveOrganizationEntitlement`
+  reports its member count, which is what the invitation limit needs and is
+  real. Storage and devices are still measured per account and report zero for
+  an organization; summing them across an organization's workspaces has not
+  been built. The account path still reports a hardcoded member count of 1.
+- **The org audit log.** `organization_audit_events` is a table nothing writes
+  to. Workspace actions are audited; organization actions are not.
+- **Choosing which organization owns a new workspace.** A workspace created by
+  someone who belongs to exactly one organization is linked to it. Someone in
+  several gets an unlinked workspace, because the request has no field to say
+  which one should pay, and guessing would put a practice on the wrong bill.
+- **A workspace's organization is not enforced.** `organization_id` is nullable
+  and stays that way until the point above is settled.
+- **SSO, SCIM, custom domains and branding.** Columns and settings fields exist;
+  nothing reads them.
+
+### Also in this pass (repairing Phases 18 and 19)
+
+Phase 18/19 shipped with `pnpm verify` red, which is how all of this reached
+`main` at once:
+
+- **The schema could not be applied at all.** `0008` re-added the column and
+  index `0007` had already created, without `IF NOT EXISTS`, so migration
+  stopped there on every database and nothing past `0007` could ever run.
+- **The migration CLI could not start**, importing a `getEnv` that `env.ts` does
+  not export.
+- **`packages/types` did not compile**: `z.record()` takes a key schema and a
+  value schema in zod 4. This failure stopped `pnpm typecheck` before it reached
+  `apps/api`, hiding 28 more errors there — including a subscription write
+  naming four fields the record does not have.
+- **No organization could ever gain a member.** The plan check read a
+  free-plan entitlement whatever the organization paid for, so the limit was
+  zero seats on every plan; the "already a member" check asked about the
+  inviter; and the invitation token was hashed, stored and then dropped, so no
+  invitation could be accepted even if one had been issued.
+- **Permission denials and stale invitations were 500s.** Three error codes
+  outside `ERROR_CODES` fell through to "internal", telling the caller the
+  server had broken and filing false server errors in the log.
+- **Organization branding and settings were silently dropped** by the
+  PostgreSQL adapter's insert, which named six columns out of eleven.
+- **`user_id` was left `NOT NULL`** while the record allowed null, so the
+  organization-owned subscription the phase exists to create could not be
+  inserted.
+- **Billing could not update a subscription.** The upsert keyed its conflict on
+  a freshly generated id, so a second write for the same account tried to insert
+  a rival row and hit the unique index instead of updating.
+- **The migration assigned workspaces by membership rather than ownership**,
+  which handed a practice to whichever colleague was migrated last.
+- **Two accounts sharing an email local part collided on the organization slug**;
+  the second was filed as an error and the run still reported success. Slugs
+  also kept dots that the schema forbids.
+- **The dry run over-reported**, counting a migrated subscription for every
+  account whether or not one existed, so the preview an operator approved was
+  not the run they would get.
 
 ### Deferred from Phase 15
 

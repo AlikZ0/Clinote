@@ -8,11 +8,13 @@
 ## Quick Navigation
 
 ### Current Implementation (Phases 18-19)
+
 - [📋 Phase 18 P0 Progress](./PHASE_18_P0_PROGRESS.md) - APIs, types, storage
 - [📋 Phase 19 P0 Progress](./PHASE_19_P0_PROGRESS.md) - Migration service
 - [🚀 Session Summary](./SESSION_SUMMARY_PHASE19.md) - Latest session work
 
 ### Documentation
+
 - [📚 Architecture Docs](./docs/PHASE_19_ARCHITECTURE.md) - System design
 - [🔄 Migration Guide](./docs/MIGRATION_USERS_TO_ORGS.md) - Operational instructions
 - [🏗️ Architecture Overview](./docs/architecture.md) - Clinote design principles
@@ -24,6 +26,7 @@
 ### Database Layer
 
 #### Migrations
+
 ```
 apps/api/src/db/migrations/
 ├── 0007_organizations.sql        ← Phase 18: Create organizations tables
@@ -31,6 +34,7 @@ apps/api/src/db/migrations/
 ```
 
 **What's Created:**
+
 - `organizations` - Billing/identity boundary
 - `organization_members` - Who's in the org
 - `organization_invites` - Invitation tokens
@@ -40,6 +44,7 @@ apps/api/src/db/migrations/
 ### Storage Layer
 
 #### Type Definitions
+
 ```
 apps/api/src/storage/ports.ts
 ├── OrganizationRecord
@@ -52,6 +57,7 @@ apps/api/src/storage/ports.ts
 ```
 
 #### Memory Adapter
+
 ```
 apps/api/src/storage/memory.ts
 ├── OrganizationStore (28 methods)
@@ -61,6 +67,7 @@ apps/api/src/storage/memory.ts
 ```
 
 #### PostgreSQL Adapter
+
 ```
 apps/api/src/storage/postgres/index.ts
 ├── OrganizationStore (SQL queries)
@@ -78,6 +85,7 @@ apps/api/src/storage/postgres/index.ts
 ### API Layer
 
 #### Types
+
 ```
 packages/types/src/organizations.ts (170 LOC)
 ├── OrganizationRole enum (owner, admin, billing)
@@ -93,6 +101,7 @@ packages/types/src/organizations.ts (170 LOC)
 ```
 
 #### Routes
+
 ```
 apps/api/src/organizations/routes.ts (430 LOC)
 ├── GET /api/v1/organizations
@@ -107,6 +116,7 @@ apps/api/src/organizations/routes.ts (430 LOC)
 ```
 
 **Helper Functions:**
+
 - `requireOrgMembership()` - Verify user is member + check permissions
 - `hashToken()` - SHA-256 token hashing
 - `generateOrgSlug()` - Safe slug generation from email
@@ -222,26 +232,29 @@ Subscription (UPDATED)
 ### Role-Based Permissions
 
 #### Organization Roles
-| Role | Manage Org | Invite Members | Manage Members | Audit | Billing | Analytics | Settings |
-|------|:----------:|:--------------:|:--------------:|:-----:|:-------:|:---------:|:--------:|
-| owner | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| admin | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
-| billing | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ |
+
+| Role    | Manage Org | Invite Members | Manage Members | Audit | Billing | Analytics | Settings |
+| ------- | :--------: | :------------: | :------------: | :---: | :-----: | :-------: | :------: |
+| owner   |     ✅     |       ✅       |       ✅       |  ✅   |   ✅    |    ✅     |    ✅    |
+| admin   |     ❌     |       ✅       |       ✅       |  ✅   |   ❌    |    ✅     |    ❌    |
+| billing |     ❌     |       ❌       |       ❌       |  ❌   |   ✅    |    ✅     |    ❌    |
 
 #### Workspace Roles
-| Role | Create | Edit | Delete | Invite | Manage | View |
-|------|:------:|:----:|:------:|:------:|:------:|:----:|
-| owner | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| admin | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| doctor | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ |
-| assistant | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ |
-| viewer | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+| Role      | Create | Edit | Delete | Invite | Manage | View |
+| --------- | :----: | :--: | :----: | :----: | :----: | :--: |
+| owner     |   ✅   |  ✅  |   ✅   |   ✅   |   ✅   |  ✅  |
+| admin     |   ❌   |  ✅  |   ✅   |   ✅   |   ✅   |  ✅  |
+| doctor    |   ❌   |  ✅  |   ❌   |   ❌   |   ❌   |  ✅  |
+| assistant |   ❌   |  ✅  |   ❌   |   ❌   |   ❌   |  ✅  |
+| viewer    |   ❌   |  ❌  |   ❌   |   ❌   |   ❌   |  ✅  |
 
 ---
 
 ## API Endpoints
 
 ### Organization Management
+
 ```
 GET    /api/v1/organizations
        List organizations user belongs to
@@ -263,6 +276,7 @@ PATCH  /api/v1/organizations/:id
 ```
 
 ### Member Management
+
 ```
 GET    /api/v1/organizations/:id/members
        List all members
@@ -292,6 +306,7 @@ POST   /api/v1/organizations/invites/:token/accept
 ## Feature Flags & Limits
 
 ### Plans
+
 - Each plan defines:
   - `maxMembers` - Max org members
   - `maxWorkspaces` - Max workspaces per org
@@ -300,6 +315,7 @@ POST   /api/v1/organizations/invites/:token/accept
   - `retentionDays` - Backup retention
 
 ### Enforcement
+
 - **Member Limits**: Checked on invitation
 - **Workspace Limits**: Checked on creation
 - **Storage Limits**: Checked on backup upload
@@ -310,22 +326,24 @@ POST   /api/v1/organizations/invites/:token/accept
 ## Backward Compatibility
 
 ### Phase 18-19 Transition
+
 ```
 Subscriptions:
   BEFORE: { userId, planId, status, ... }
   AFTER:  { userId?, organizationId?, planId, status, ... }
-  
+
 Query Logic:
   entitlement = await resolveEntitlement(userId)
     → First tries organizationId path
     → Falls back to userId path if org not found
-    
+
 Workspace Queries:
   BEFORE: WHERE owner_user_id = ?
   AFTER:  WHERE owner_user_id = ? OR organization_id = ?
 ```
 
 ### Timeline
+
 - **Phase 18**: Both paths supported
 - **Phase 19**: Migration service converts users
 - **Phase 20**: Legacy user_id path deprecated
@@ -336,22 +354,26 @@ Workspace Queries:
 ## Security Considerations
 
 ### Authentication
+
 - JWT tokens required for all org endpoints
 - User identity verified from token
 - Membership verified per operation
 
 ### Authorization
+
 - Two-level checks:
   1. Is user a member of organization?
   2. Does their role allow this action?
 - Separate from workspace authorization
 
 ### Data Isolation
+
 - Workspace audit logs don't expose to org level
 - Organization audit logs don't touch clinical data
 - Separate encryption for workspace data
 
 ### Audit Trail
+
 - All member changes logged
 - All settings changes logged
 - All audit events timestamped and linked to actor
@@ -361,6 +383,7 @@ Workspace Queries:
 ## Performance Considerations
 
 ### Indexes
+
 ```
 organizations:
   - PRIMARY KEY (id)
@@ -385,6 +408,7 @@ subscriptions:
 ```
 
 ### Query Optimization
+
 - Bulk operations use JOINs
 - List operations filtered at DB level
 - Soft deletes checked in all queries
@@ -395,17 +419,20 @@ subscriptions:
 ## Testing Strategy
 
 ### Unit Tests
+
 - Migration slug generation
 - Permission checking
 - Token hashing
 
 ### Integration Tests
+
 - Full migration on test database
 - Verify all users → orgs
 - Verify subscription updates
 - Verify workspace linking
 
 ### End-to-End Tests
+
 - Create organization
 - Invite member
 - Accept invitation
@@ -413,6 +440,7 @@ subscriptions:
 - Remove member
 
 ### Load Tests
+
 - 1000+ users migration performance
 - Concurrent member invites
 - Bulk workspace linking
@@ -422,6 +450,7 @@ subscriptions:
 ## Deployment
 
 ### Prerequisites
+
 ```bash
 # 1. Run pending migrations
 pnpm migrate
@@ -433,6 +462,7 @@ pnpm migrate:users --dry-run
 ```
 
 ### Production Deployment
+
 ```bash
 # 1. Backup database
 pg_dump $DATABASE_URL > backup.sql
@@ -447,6 +477,7 @@ pnpm migrate:users --verify
 ```
 
 ### Rollback
+
 ```bash
 # If needed:
 pg_restore --dbname=clinote backup.sql
@@ -456,13 +487,13 @@ pg_restore --dbname=clinote backup.sql
 
 ## What's NOT Implemented (Phases 19+)
 
-| Feature | Phase | Status |
-|---------|-------|--------|
-| Admin UI dashboard | 19 P2 | Design phase |
-| Real metrics calculation | 19 P3 | Planned |
-| Organization audit logging | 19 P4 | Planned |
-| Custom domains | 22 | Planned |
-| SSO/SCIM integration | 22 | Planned |
+| Feature                    | Phase | Status       |
+| -------------------------- | ----- | ------------ |
+| Admin UI dashboard         | 19 P2 | Design phase |
+| Real metrics calculation   | 19 P3 | Planned      |
+| Organization audit logging | 19 P4 | Planned      |
+| Custom domains             | 22    | Planned      |
+| SSO/SCIM integration       | 22    | Planned      |
 
 ---
 

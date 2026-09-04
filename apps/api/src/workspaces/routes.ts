@@ -145,11 +145,22 @@ export async function registerWorkspaceRoutes(
       throw new AppError('validation_failed', { message: 'That workspace id is already in use.' })
     }
 
+    // A workspace belongs to exactly one organization (docs/architecture.md).
+    // Where the creator has a single organization — which is what the personal
+    // organization each account gets makes true — that is the one paying for
+    // this workspace, so link it now rather than leaving a row for a backfill
+    // to find later. Choosing between several is a decision only the caller can
+    // make, and needs an organizationId on the request before it can be made
+    // here; until then those workspaces stay unlinked, as they were before.
+    const memberOf = await stores.organizations.listForUser(userId)
+    const organizationId = memberOf.length === 1 ? memberOf[0]!.id : null
+
     const now = nowIso()
     const workspace = await stores.workspaces.create({
       id: body.id,
       ownerUserId: userId,
       name: body.name,
+      organizationId,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,

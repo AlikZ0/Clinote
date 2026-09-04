@@ -29,8 +29,10 @@ test('every control is big enough to hit', async ({ page }) => {
   for (const control of await page.getByRole('button').all()) {
     if (!(await control.isVisible())) continue
     const box = await control.boundingBox()
-    expect(box!.height, `"${(await control.innerText()).trim()}" is too short to tap`)
-      .toBeGreaterThanOrEqual(44)
+    expect(
+      box!.height,
+      `"${(await control.innerText()).trim()}" is too short to tap`,
+    ).toBeGreaterThanOrEqual(44)
   }
 })
 

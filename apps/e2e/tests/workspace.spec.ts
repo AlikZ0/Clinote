@@ -24,7 +24,9 @@ const COLLEAGUE_PASSPHRASE = 'a different long passphrase'
 async function createWorkspace(page: Page, name: string): Promise<void> {
   await page.goto('/team')
   await cardFor(page, 'Create a workspace').getByLabel('Workspace name').fill(name)
-  await cardFor(page, 'Create a workspace').getByRole('button', { name: 'Create workspace' }).click()
+  await cardFor(page, 'Create a workspace')
+    .getByRole('button', { name: 'Create workspace' })
+    .click()
   // Creating it also opens it: the switcher is showing the new dataset.
   await expect(page.locator('.switcher__name')).toHaveText(name)
 }
@@ -42,7 +44,9 @@ async function invite(page: Page, email: string, role: string): Promise<string> 
   return shown
 }
 
-test('a colleague joins, is granted access, and reads the clinic’s records', async ({ browser }) => {
+test('a colleague joins, is granted access, and reads the clinic’s records', async ({
+  browser,
+}) => {
   const owner = newAccount('owner')
   const colleague = newAccount('colleague')
 

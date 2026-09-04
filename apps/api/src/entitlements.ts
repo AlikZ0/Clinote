@@ -33,7 +33,9 @@ export async function resolveEntitlement(stores: Stores, userId: string): Promis
   if (!plan) {
     const freePlan = await stores.plans.findById(FREE_PLAN_ID)
     if (!freePlan) {
-      throw new Error(`Plan catalog missing: neither "${planId}" nor free plan "${FREE_PLAN_ID}" found in database`)
+      throw new Error(
+        `Plan catalog missing: neither "${planId}" nor free plan "${FREE_PLAN_ID}" found in database`,
+      )
     }
   }
 
@@ -72,26 +74,36 @@ export async function resolveOrganizationEntitlement(
   stores: Stores,
   organizationId: string,
 ): Promise<Entitlement> {
-  // Phase 18: SubscriptionStore must support findByOrganizationId (migration adds this)
-  // For now, fall back to free plan until migration is complete.
-  // TODO: Implement when organization subscription migration is done.
+  const subscription = await stores.subscriptions.findByOrganizationId(organizationId)
 
-  const freePlan = await stores.plans.findById(FREE_PLAN_ID)
-  if (!freePlan) {
-    throw new Error(`Free plan "${FREE_PLAN_ID}" not found in database (invariant I7 violation)`)
+  const entitled = subscription !== null && ENTITLED_STATUSES.has(subscription.status)
+  const planId = entitled ? subscription.planId : FREE_PLAN_ID
+
+  // I7: the catalog is data. An unknown plan id degrades to free rather than
+  // handing out a plan the operator never published.
+  const plan = (await stores.plans.findById(planId)) ?? (await stores.plans.findById(FREE_PLAN_ID))
+  if (!plan) {
+    throw new Error(
+      `Plan catalog missing: neither "${planId}" nor free plan "${FREE_PLAN_ID}" found in database`,
+    )
   }
 
   return {
-    planId: freePlan.id,
-    status: 'active',
-    features: freePlan.features,
-    limits: freePlan.limits,
+    planId: plan.id,
+    status: subscription?.status ?? 'active',
+    features: plan.features,
+    limits: plan.limits,
     usage: {
-      storageBytes: 0, // TODO: Aggregate org's workspace storage
-      devices: 0,      // TODO: Count org members' devices
-      members: 0,      // TODO: Count organization_members
+      // Storage and devices are still measured per account, not per
+      // organization: an org's quota is the sum over its workspaces, and
+      // nothing aggregates that yet. Reporting zero is honest about what is
+      // measured; the members count is the one the invite path gates on, and
+      // it is real.
+      storageBytes: 0,
+      devices: 0,
+      members: await stores.organizations.countMembers(organizationId),
     },
-    expiresAt: null,
+    expiresAt: subscription?.currentPeriodEnd ?? null,
   }
 }
 

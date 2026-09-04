@@ -359,7 +359,9 @@ export function createPostgresStores(sql: Sql): Stores {
         status: string
         current_period_end: string | null
       }>(
-        'SELECT id, user_id, organization_id, plan_id, status, current_period_end FROM subscriptions WHERE user_id = $1',
+        `SELECT id, user_id, organization_id, plan_id, status, current_period_end
+           FROM subscriptions WHERE user_id = $1
+          ORDER BY updated_at DESC, id DESC LIMIT 1`,
         [userId],
       )
 
@@ -384,7 +386,9 @@ export function createPostgresStores(sql: Sql): Stores {
         status: string
         current_period_end: string | null
       }>(
-        'SELECT id, user_id, organization_id, plan_id, status, current_period_end FROM subscriptions WHERE organization_id = $1',
+        `SELECT id, user_id, organization_id, plan_id, status, current_period_end
+           FROM subscriptions WHERE organization_id = $1
+          ORDER BY updated_at DESC, id DESC LIMIT 1`,
         [organizationId],
       )
 
@@ -401,26 +405,38 @@ export function createPostgresStores(sql: Sql): Stores {
     },
 
     async upsert(subscription) {
-      // Insert with id (must be provided by caller for idempotency)
-      const subId = subscription.id || randomUUID()
+      // Find the row this write is meant to land on. Keying the conflict on a
+      // freshly generated id meant every billing event inserted a rival row
+      // instead of updating the account's subscription.
+      const existing = subscription.id
+        ? null
+        : ((subscription.organizationId
+            ? await subscriptions.findByOrganizationId(subscription.organizationId)
+            : null) ??
+          (subscription.userId ? await subscriptions.findByUserId(subscription.userId) : null))
+
+      const subId = subscription.id ?? existing?.id ?? randomUUID()
+      const organizationId = subscription.organizationId ?? existing?.organizationId ?? null
       await sql.query(
         `INSERT INTO subscriptions (id, user_id, organization_id, plan_id, status, current_period_end)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (id) DO UPDATE
-           SET plan_id = EXCLUDED.plan_id,
+           SET user_id = EXCLUDED.user_id,
+               organization_id = EXCLUDED.organization_id,
+               plan_id = EXCLUDED.plan_id,
                status = EXCLUDED.status,
                current_period_end = EXCLUDED.current_period_end,
                updated_at = now()`,
         [
           subId,
           subscription.userId ?? null,
-          subscription.organizationId ?? null,
+          organizationId,
           subscription.planId,
           subscription.status,
           subscription.currentPeriodEnd,
         ],
       )
-      return { ...subscription, id: subId }
+      return { ...subscription, id: subId, organizationId }
     },
   }
 
@@ -1499,11 +1515,27 @@ export function createPostgresStores(sql: Sql): Stores {
 
   const organizations: OrganizationStore = {
     async create(org) {
+      // Branding and settings are columns on the table and fields on the
+      // record; leaving them out of the insert dropped them silently, so the
+      // `personal: true` marker the user migration writes never survived.
       const { rows } = await sql.query<OrganizationRow>(
-        `INSERT INTO organizations (id, name, slug, owner_user_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO organizations (id, name, slug, owner_user_id, logo_url, primary_color,
+                                    secondary_color, custom_domain, settings, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
-        [org.id, org.name, org.slug, org.ownerUserId, org.createdAt, org.updatedAt],
+        [
+          org.id,
+          org.name,
+          org.slug,
+          org.ownerUserId,
+          org.logoUrl ?? null,
+          org.primaryColor ?? null,
+          org.secondaryColor ?? null,
+          org.customDomain ?? null,
+          JSON.stringify(org.settings ?? {}),
+          org.createdAt,
+          org.updatedAt,
+        ],
       )
       return toOrganization(rows[0]!)
     },
@@ -1610,10 +1642,10 @@ export function createPostgresStores(sql: Sql): Stores {
     },
 
     async removeMember(organizationId, userId) {
-      await sql.query('DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2', [
-        organizationId,
-        userId,
-      ])
+      await sql.query(
+        'DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2',
+        [organizationId, userId],
+      )
     },
 
     async createInvite(invite) {

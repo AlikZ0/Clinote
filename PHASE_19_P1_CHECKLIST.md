@@ -12,24 +12,28 @@
 Before starting P1, ensure Phase 19 P0 is fully operational:
 
 - [ ] Database migration 0008 has been applied
+
   ```bash
   psql $DATABASE_URL -c "\\d workspaces" | grep organization_id
   # Should show: organization_id | uuid
   ```
 
 - [ ] Migration service runs successfully
+
   ```bash
   pnpm migrate:users --verify
   # Should show: ✅ Users with organization: [N]
   ```
 
 - [ ] All users have organizations
+
   ```bash
   psql $DATABASE_URL -c "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND id NOT IN (SELECT DISTINCT user_id FROM organization_members)"
   # Should return: 0
   ```
 
 - [ ] All workspaces linked to organizations
+
   ```bash
   psql $DATABASE_URL -c "SELECT COUNT(*) FROM workspaces WHERE deleted_at IS NULL AND organization_id IS NULL"
   # Should return: 0
@@ -48,6 +52,7 @@ Before starting P1, ensure Phase 19 P0 is fully operational:
 ### Part A: Frontend Components (React/Vue)
 
 #### Dashboard Page
+
 ```
 components/organizations/DashboardPage.tsx
 ├── Header with org name, logo
@@ -65,6 +70,7 @@ components/organizations/DashboardPage.tsx
 ```
 
 #### Members Management
+
 ```
 components/organizations/MembersTab.tsx
 ├── Member list with:
@@ -86,6 +92,7 @@ components/organizations/MembersTab.tsx
 ```
 
 #### Workspaces Tab
+
 ```
 components/organizations/WorkspacesTab.tsx
 ├── List all org's workspaces
@@ -98,6 +105,7 @@ components/organizations/WorkspacesTab.tsx
 ```
 
 #### Settings Tab
+
 ```
 components/organizations/SettingsTab.tsx
 ├── Organization info:
@@ -115,6 +123,7 @@ components/organizations/SettingsTab.tsx
 ```
 
 #### Billing Tab
+
 ```
 components/organizations/BillingTab.tsx
 ├── Current plan display
@@ -128,6 +137,7 @@ components/organizations/BillingTab.tsx
 ### Part B: Backend Changes
 
 #### New Types
+
 ```typescript
 // packages/types/src/organizations.ts (additions)
 interface OrganizationDashboard {
@@ -146,6 +156,7 @@ interface MemberWithStats extends OrganizationMember {
 ```
 
 #### New Routes
+
 ```
 apps/api/src/organizations/
 ├── dashboard.ts        # GET /api/v1/organizations/:id/dashboard
@@ -158,20 +169,24 @@ apps/api/src/organizations/
 ### Part C: Real Metrics Implementation
 
 #### Storage Usage Calculation
+
 ```typescript
 // apps/api/src/storage/metrics.ts (new)
-async function calculateOrganizationStorage(stores: Stores, orgId: string): Promise<{
+async function calculateOrganizationStorage(
+  stores: Stores,
+  orgId: string,
+): Promise<{
   bytesUsed: number
   fileCount: number
   backupCount: number
 }> {
   // 1. Get all workspaces in organization
   const workspaces = await stores.workspaces.listAll() // Filter by org_id
-  
+
   // 2. For each workspace, calculate:
   //    - Storage used by backups
   //    - SyncEnvelope payload size (if applicable)
-  
+
   // 3. Sum and return
 }
 
@@ -179,12 +194,13 @@ async function enforceStorageLimits(stores: Stores, orgId: string): Promise<bool
   // Check if org is within storage limits
   const entitlement = await resolveOrganizationEntitlement(stores, orgId)
   const usage = await calculateOrganizationStorage(stores, orgId)
-  
+
   return usage.bytesUsed <= entitlement.limits.storageBytes
 }
 ```
 
 #### Member Limit Enforcement
+
 ```typescript
 // Updated in apps/api/src/organizations/routes.ts
 // POST /api/v1/organizations/:id/invites
@@ -192,11 +208,11 @@ async function inviteMember(request, reply) {
   const entitlement = await resolveOrganizationEntitlement(stores, orgId)
   const members = await stores.organizations.countMembers(orgId)
   const pending = (await stores.organizations.listPendingInvites(orgId)).length
-  
+
   if (members + pending >= entitlement.limits.maxMembers) {
     throw new AppError('member_limit_reached', ...)
   }
-  
+
   // ... continue with invite
 }
 ```
@@ -206,6 +222,7 @@ async function inviteMember(request, reply) {
 ## Phase 19 P1 Implementation Order
 
 ### Week 1: Foundation
+
 1. **Day 1-2**: Create React/Vue components skeleton
    - Dashboard layout
    - Tab navigation
@@ -224,6 +241,7 @@ async function inviteMember(request, reply) {
    - Remove member confirmation
 
 ### Week 2: Metrics & Polish
+
 4. **Day 5**: Implement storage calculation
    - StorageUsageStore integration
    - Real quota enforcement
@@ -244,6 +262,7 @@ async function inviteMember(request, reply) {
 ## Development Checklist
 
 ### Frontend Setup
+
 - [ ] Install required UI dependencies (if not already done)
 - [ ] Create components directory structure
 - [ ] Set up React Query / SWR for data fetching
@@ -251,6 +270,7 @@ async function inviteMember(request, reply) {
 - [ ] Set up error boundary
 
 ### Backend Setup
+
 - [ ] Create dashboard route handler
 - [ ] Create analytics route handler
 - [ ] Implement metrics calculation
@@ -258,6 +278,7 @@ async function inviteMember(request, reply) {
 - [ ] Create admin audit logging
 
 ### Testing
+
 - [ ] Write component tests
 - [ ] Test API endpoints with Postman/Thunder Client
 - [ ] Manual E2E testing with real data
@@ -265,6 +286,7 @@ async function inviteMember(request, reply) {
 - [ ] Error scenario testing
 
 ### Documentation
+
 - [ ] Document new API endpoints
 - [ ] Add frontend component storybook
 - [ ] Create admin user guide
@@ -275,6 +297,7 @@ async function inviteMember(request, reply) {
 ## Key Files to Create/Modify
 
 ### New Files to Create
+
 ```
 apps/web/components/organizations/
 ├── DashboardPage.tsx
@@ -297,6 +320,7 @@ packages/types/src/
 ```
 
 ### Files to Modify
+
 ```
 apps/api/src/organizations/routes.ts
 ├── Add dashboard route
@@ -349,7 +373,7 @@ PATCH  /api/v1/organizations/:id/settings
 
 ```sql
 -- Get organization with all stats
-SELECT 
+SELECT
   o.*,
   COUNT(DISTINCT om.user_id) as member_count,
   COUNT(DISTINCT w.id) as workspace_count,
@@ -364,7 +388,7 @@ WHERE o.id = $1
 GROUP BY o.id;
 
 -- Get workspace belonging to organization
-SELECT * FROM workspaces 
+SELECT * FROM workspaces
 WHERE organization_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC;
 ```
@@ -374,6 +398,7 @@ ORDER BY created_at DESC;
 ## Testing Scenarios
 
 ### Scenario 1: Create Organization
+
 1. Click "Create Organization"
 2. Enter name and slug
 3. Verify organization created
@@ -381,6 +406,7 @@ ORDER BY created_at DESC;
 5. Verify dashboard loads
 
 ### Scenario 2: Invite Member
+
 1. Go to Members tab
 2. Click "Invite Member"
 3. Enter email and select role
@@ -390,6 +416,7 @@ ORDER BY created_at DESC;
 7. Verify limit enforcement
 
 ### Scenario 3: Change Role
+
 1. Go to Members tab
 2. Click role dropdown on member
 3. Select new role
@@ -397,12 +424,14 @@ ORDER BY created_at DESC;
 5. Verify audit log created
 
 ### Scenario 4: Storage Quota
+
 1. Check organization storage
 2. Verify calculation is correct
 3. When at limit, verify can't upload backup
 4. Verify warning message shown at 80%
 
 ### Scenario 5: Workspace Management
+
 1. Go to Workspaces tab
 2. See all organization workspaces
 3. Verify workspace count matches limit
@@ -432,13 +461,13 @@ ORDER BY created_at DESC;
 
 Target performance metrics:
 
-| Operation | Target | Note |
-|-----------|--------|------|
-| Load dashboard | < 500ms | Including all tabs |
-| List members | < 300ms | 1000 members |
-| Invite member | < 200ms | Email sent async |
-| Change role | < 200ms | |
-| Calculate storage | < 1000ms | For large orgs |
+| Operation         | Target   | Note               |
+| ----------------- | -------- | ------------------ |
+| Load dashboard    | < 500ms  | Including all tabs |
+| List members      | < 300ms  | 1000 members       |
+| Invite member     | < 200ms  | Email sent async   |
+| Change role       | < 200ms  |                    |
+| Calculate storage | < 1000ms | For large orgs     |
 
 ---
 
@@ -468,16 +497,19 @@ If Phase 19 P1 has issues:
 ## Post-Implementation
 
 ### Monitoring
+
 - Track dashboard load times
 - Monitor storage calculation performance
 - Alert on limit enforcement failures
 
 ### Documentation
+
 - Update user guides
 - Add admin onboarding docs
 - Create troubleshooting guide
 
 ### Metrics
+
 - Track feature adoption
 - Monitor error rates
 - Gather user feedback
@@ -508,4 +540,4 @@ pnpm lint
 **Phase 19 P1 Ready to Start!** 🚀
 
 Previous session: Phase 19 P0 ✅  
-Current session: Ready for Phase 19 P1  
+Current session: Ready for Phase 19 P1

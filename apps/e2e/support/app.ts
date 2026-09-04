@@ -13,7 +13,9 @@ import { expect, type Page } from '@playwright/test'
  * picked that one up.
  */
 export function cardFor(page: Page, heading: string) {
-  return page.locator('.card').filter({ has: page.getByRole('heading', { name: heading, exact: true }) })
+  return page
+    .locator('.card')
+    .filter({ has: page.getByRole('heading', { name: heading, exact: true }) })
 }
 
 export interface Account {
@@ -99,7 +101,9 @@ export async function addClient(
   if (client.notes) await page.getByLabel(/Notes/).fill(client.notes)
   await page.getByRole('button', { name: 'Save', exact: true }).click()
 
-  await expect(page.getByRole('heading', { name: `${client.lastName} ${client.firstName}` })).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: `${client.lastName} ${client.firstName}` }),
+  ).toBeVisible()
 }
 
 /**

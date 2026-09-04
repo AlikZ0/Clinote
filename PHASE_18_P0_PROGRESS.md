@@ -7,12 +7,14 @@
 ## ✅ Completed Phases
 
 ### Phase 1: Architecture & Types ✅
+
 - [x] Created migration `0007_organizations.sql` (5 new tables)
 - [x] Created `packages/types/src/organizations.ts` (roles, permissions, schemas)
 - [x] Updated `packages/types/src/index.ts` to export organizations
 - [x] Added organization interfaces to storage ports
 
 ### Phase 2: Entitlements Fix (CRITICAL) ✅
+
 - [x] **Fixed Invariant I7**: Plans now read from database (not hardcoded)
   - Before: `findPlan(DEFAULT_PLANS, planId)` → Compiled-in constant
   - After: `stores.plans.findById(planId)` → Database-driven
@@ -26,6 +28,7 @@
 - [x] **Added `resolveOrganizationEntitlement()`**: New path for org-based entitlements
 
 ### Phase 3: Storage Layer Implementation ✅
+
 - [x] Memory Storage: OrganizationStore (28 methods)
 - [x] PostgreSQL Storage: SQL queries + helpers (450+ lines)
 - [x] Updated SubscriptionStore for org_id support
@@ -34,6 +37,7 @@
 ### Phase 4: API Routes Implementation ✅
 
 #### Organizations Endpoints
+
 ```
 ✅ GET    /api/v1/organizations              # List user's orgs
 ✅ POST   /api/v1/organizations              # Create org
@@ -42,6 +46,7 @@
 ```
 
 #### Members Management
+
 ```
 ✅ GET    /api/v1/organizations/:id/members  # List members
 ✅ POST   /api/v1/organizations/:id/invites  # Invite member
@@ -50,11 +55,13 @@
 ```
 
 #### Invitations
+
 ```
 ✅ POST   /api/v1/organizations/invites/:token/accept  # Accept invite
 ```
 
 #### Features
+
 - ✅ Permission-based access control (requireOrgMembership)
 - ✅ Role-based authorization (canOrg)
 - ✅ Invitation tokens (SHA-256, 72-hour expiry)
@@ -64,6 +71,7 @@
 - ✅ White-label support (logo, colors, custom domain)
 
 #### Integration
+
 - ✅ Registered routes in `apps/api/src/app.ts`
 - ✅ Imported registerOrganizationRoutes
 - ✅ Added to route registration pipeline
@@ -75,6 +83,7 @@
 ### File: `apps/api/src/organizations/routes.ts`
 
 **Statistics:**
+
 - Lines of code: ~430
 - Endpoints: 8
 - Helper functions: 1 (requireOrgMembership)
@@ -132,12 +141,14 @@
 ### Access Control
 
 **requireOrgMembership() function:**
+
 - Verifies user is org member (with joinedAt)
 - Checks permission (optional)
 - Returns org record and user's role
 - Throws appropriate AppError on failure
 
 **Permission System:**
+
 - Relies on canOrg(role, permission)
 - From @clinote/types/organizations
 - Permissions: organization.manage, members.invite, members.manage, etc.
@@ -146,29 +157,31 @@
 
 ## 🎯 P0 Coverage Complete
 
-| Component | Phase | Status | LOC |
-|-----------|-------|--------|-----|
-| Database Migration | 1 | ✅ | 150 |
-| TypeScript Types | 1 | ✅ | 170 |
-| Memory Storage | 3 | ✅ | 280 |
-| PostgreSQL Storage | 3 | ✅ | 450 |
-| Storage Ports | 1-3 | ✅ | 90 |
-| Entitlements Fix | 2 | ✅ | 50 |
-| API Routes | 4 | ✅ | 430 |
-| App Integration | 4 | ✅ | 2 |
-| **TOTAL P0** | **1-4** | **✅** | **~1622** |
+| Component          | Phase   | Status | LOC       |
+| ------------------ | ------- | ------ | --------- |
+| Database Migration | 1       | ✅     | 150       |
+| TypeScript Types   | 1       | ✅     | 170       |
+| Memory Storage     | 3       | ✅     | 280       |
+| PostgreSQL Storage | 3       | ✅     | 450       |
+| Storage Ports      | 1-3     | ✅     | 90        |
+| Entitlements Fix   | 2       | ✅     | 50        |
+| API Routes         | 4       | ✅     | 430       |
+| App Integration    | 4       | ✅     | 2         |
+| **TOTAL P0**       | **1-4** | **✅** | **~1622** |
 
 ---
 
 ## 📝 What Works Now
 
 ### Multi-tenant Boundaries
+
 - ✅ Organizations layer for billing/identity
 - ✅ Workspaces remain data/encryption boundary
 - ✅ Separate org_members and workspace_members tables
 - ✅ Org-scoped subscriptions supported (backward compatible)
 
 ### CRUD Operations
+
 - ✅ Create organizations (slug-based uniqueness)
 - ✅ List user's organizations
 - ✅ Update organization details
@@ -177,6 +190,7 @@
 - ✅ Plan-based limits enforced
 
 ### Security & Validation
+
 - ✅ Role-based access control (owner, admin, billing)
 - ✅ Permission-based operations
 - ✅ Invitation token hashing (SHA-256)
@@ -185,6 +199,7 @@
 - ✅ Membership verification on every protected endpoint
 
 ### White-labeling Foundation
+
 - ✅ Custom domain support (findByCustomDomain)
 - ✅ Logo, colors, custom branding fields
 - ✅ Per-org settings/configuration
@@ -195,14 +210,17 @@
 ## 🔧 Architecture Validated
 
 ✅ **Invariant I3**: Admin panel has ZERO access to sync_envelopes
+
 - Org audit only logs metadata (plan changes, members, etc)
 - No client data exposure
 
 ✅ **Invariant I7**: Plan catalog from database
+
 - Plans loaded via stores.plans.findById()
 - No hardcoded defaults
 
 ✅ **Invariant I5**: Separate billing and data boundaries
+
 - org_members ≠ workspace_members
 - Org member can be billing team without workspace access
 
@@ -211,11 +229,13 @@
 ## 📚 Files Modified/Created
 
 **Created:**
+
 - ✅ `apps/api/src/db/migrations/0007_organizations.sql` (150 LOC)
 - ✅ `packages/types/src/organizations.ts` (170 LOC)
 - ✅ `apps/api/src/organizations/routes.ts` (430 LOC)
 
 **Modified:**
+
 - ✅ `packages/types/src/index.ts`
 - ✅ `apps/api/src/storage/ports.ts` (org + subscription)
 - ✅ `apps/api/src/storage/memory.ts` (org + subscription)
@@ -245,6 +265,7 @@
 ## 🚀 Next: P1 Work (Phase 19+)
 
 After P0 merge:
+
 - [ ] Session revocation improvements (currently 15 min lag)
 - [ ] Backup object key scoping per org
 - [ ] SyncStore batch performance optimization
