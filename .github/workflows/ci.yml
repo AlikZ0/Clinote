@@ -9,8 +9,13 @@ jobs:
   verify:
     runs-on: ubuntu-latest
 
-    # The API suite runs once per storage adapter; without this service the
-    # PostgreSQL adapter would silently go untested.
+    # The API suite runs once per storage adapter; without these the PostgreSQL
+    # and object-store adapters would silently go untested.
+    #
+    # MinIO is started as a step rather than a service: a service container
+    # takes no command, and this image needs `server /data`. As a service it
+    # printed its usage and exited, and a service that fails to start fails the
+    # job before the first step runs.
     services:
       postgres:
         image: postgres:16-alpine
@@ -22,19 +27,6 @@ jobs:
           - 5433:5432
         options: >-
           --health-cmd "pg_isready -U clinote -d clinote_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-      minio:
-        image: minio/minio:latest
-        env:
-          MINIO_ROOT_USER: clinote
-          MINIO_ROOT_PASSWORD: clinote-secret
-        ports:
-          - 9100:9000
-        options: >-
-          --health-cmd "mc ready local"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -61,6 +53,27 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9100:9000 \
+            -e MINIO_ROOT_USER=clinote \
+            -e MINIO_ROOT_PASSWORD=clinote-secret \
+            minio/minio:latest server /data
+
+          # Readiness is checked from the runner, which has curl; the server
+          # image is not required to.
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9100/minio/health/live; then
+              echo "MinIO is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "MinIO did not become ready" >&2
+          docker logs minio >&2
+          exit 1
 
       - name: Create the backup bucket
         run: |
