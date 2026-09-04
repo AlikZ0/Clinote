@@ -28,7 +28,7 @@ docs/         Architecture and specifications (start at docs/README.md)
 
 ## Requirements
 
-- Node.js ≥ 20.19
+- Node.js ≥ 22.12
 - pnpm 10 (`corepack enable`)
 
 TypeScript is pinned to 5.9 because typescript-eslint does not yet support

@@ -43,13 +43,16 @@ jobs:
       TEST_SMTP_HOST: 127.0.0.1
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
+      # No node24 build exists for this one, and its successor (pnpm/setup)
+      # wants pnpm 11 while this repository pins 10. It stays on node20 until
+      # one of those changes.
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
