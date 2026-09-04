@@ -19,6 +19,7 @@ import { registerNotificationRoutes } from './notifications/routes'
 import { createEmailSender, type EmailSender } from './notifications'
 import { registerSyncRoutes } from './sync/routes'
 import { registerWorkspaceRoutes } from './workspaces/routes'
+import { registerOrganizationRoutes } from './organizations/routes'
 import { registerSecurityHeaders } from './plugins/security'
 
 export interface BuildAppOptions {
@@ -187,6 +188,7 @@ export async function buildApp({
   await registerBackupRoutes(app, { env, stores, objects: objectStore })
   await registerNotificationRoutes(app, { env, stores })
   await registerWorkspaceRoutes(app, { env, stores, email: emailSender })
+  await registerOrganizationRoutes(app, { env, stores, email: emailSender })
   await registerBillingRoutes(app, {
     env,
     stores,

@@ -1,10 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Clinote">
+  <!-- Background -->
   <rect width="512" height="512" rx="113" fill="#0f172a" />
-  <path
-    d="M 352 158 A 123 123 0 1 0 352 354"
-    fill="none"
-    stroke="#0ea5e9"
-    stroke-width="59"
-    stroke-linecap="round"
-  />
+
+  <!-- Clipboard/Document shape -->
+  <g transform="translate(256, 256)">
+    <!-- Clipboard body -->
+    <rect x="-80" y="-100" width="160" height="200" rx="12" fill="none" stroke="#0ea5e9" stroke-width="20" />
+
+    <!-- Clipboard clip -->
+    <rect x="-50" y="-120" width="100" height="35" rx="8" fill="#0ea5e9" />
+
+    <!-- Document lines -->
+    <line x1="-60" y1="-50" x2="60" y2="-50" stroke="#0ea5e9" stroke-width="16" stroke-linecap="round" opacity="0.6" />
+    <line x1="-60" y1="0" x2="60" y2="0" stroke="#0ea5e9" stroke-width="16" stroke-linecap="round" opacity="0.5" />
+    <line x1="-60" y1="50" x2="40" y2="50" stroke="#0ea5e9" stroke-width="16" stroke-linecap="round" opacity="0.4" />
+  </g>
 </svg>

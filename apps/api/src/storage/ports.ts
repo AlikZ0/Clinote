@@ -64,7 +64,9 @@ export interface PasswordResetRecord {
 }
 
 export interface SubscriptionRecord {
-  userId: string
+  id: string
+  userId: string | null // Null in Phase 18+ (subscriptions are org-based)
+  organizationId: string | null // Set in Phase 18+ (the owner of the subscription)
   planId: string
   status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'expired'
   currentPeriodEnd: string | null
@@ -75,6 +77,8 @@ export interface UserStore {
   findByEmail(email: string): Promise<UserRecord | null>
   create(user: UserRecord): Promise<UserRecord>
   update(id: string, patch: Partial<UserRecord>): Promise<UserRecord>
+  /** Phase 19: List all users (for migration). Optional, returns empty if not implemented. */
+  listAll?(): Promise<UserRecord[]>
 }
 
 export interface SessionStore {
@@ -103,6 +107,8 @@ export interface PasswordResetStore {
 
 export interface SubscriptionStore {
   findByUserId(userId: string): Promise<SubscriptionRecord | null>
+  /** One live subscription per organization (Phase 18+). */
+  findByOrganizationId(organizationId: string): Promise<SubscriptionRecord | null>
   /** One live subscription per account; billing (Phase 13) writes through this. */
   upsert(subscription: SubscriptionRecord): Promise<SubscriptionRecord>
 }
@@ -297,6 +303,7 @@ export interface WorkspaceRecord {
   id: string
   ownerUserId: string
   name: string
+  organizationId: string | null // Phase 18+: Link to billing/identity boundary
   createdAt: string
   updatedAt: string
   deletedAt: string | null
@@ -328,6 +335,8 @@ export interface WorkspaceStore {
   findById(id: string): Promise<WorkspaceRecord | null>
   /** Every workspace the user is a member of, with their role in each. */
   listForUser(userId: string): Promise<(WorkspaceRecord & { role: WorkspaceRole })[]>
+  /** Phase 19: List all workspaces (for migration). Optional, returns empty if not implemented. */
+  listAll?(): Promise<WorkspaceRecord[]>
   update(id: string, patch: Partial<WorkspaceRecord>): Promise<WorkspaceRecord>
   softDelete(id: string, deletedAt: string): Promise<void>
 
@@ -407,6 +416,69 @@ export interface PlanStore {
   findById(id: string): Promise<Plan | null>
 }
 
+/**
+ * Organizations: Phase 18 P0 (docs/architecture.md).
+ * The billing and identity boundary, containing workspaces (data boundary).
+ */
+
+export interface OrganizationRecord {
+  id: string
+  name: string
+  slug: string
+  ownerUserId: string
+  logoUrl: string | null
+  primaryColor: string | null
+  secondaryColor: string | null
+  customDomain: string | null
+  settings: unknown // jsonb in DB
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface OrganizationMemberRecord {
+  organizationId: string
+  userId: string
+  role: 'owner' | 'admin' | 'billing'
+  invitedAt: string
+  joinedAt: string | null
+}
+
+export interface OrganizationInviteRecord {
+  id: string
+  organizationId: string
+  email: string
+  role: 'owner' | 'admin' | 'billing'
+  tokenHash: string
+  invitedBy: string | null
+  expiresAt: string
+  acceptedAt: string | null
+  createdAt: string
+}
+
+export interface OrganizationStore {
+  create(org: OrganizationRecord): Promise<OrganizationRecord>
+  findById(id: string): Promise<OrganizationRecord | null>
+  findBySlug(slug: string): Promise<OrganizationRecord | null>
+  findByCustomDomain(domain: string): Promise<OrganizationRecord | null>
+  /** Every organization the user belongs to or owns. */
+  listForUser(userId: string): Promise<OrganizationRecord[]>
+  update(id: string, patch: Partial<OrganizationRecord>): Promise<OrganizationRecord>
+  softDelete(id: string, deletedAt: string): Promise<void>
+
+  listMembers(organizationId: string): Promise<OrganizationMemberRecord[]>
+  findMember(organizationId: string, userId: string): Promise<OrganizationMemberRecord | null>
+  countMembers(organizationId: string): Promise<number>
+  putMember(member: OrganizationMemberRecord): Promise<OrganizationMemberRecord>
+  removeMember(organizationId: string, userId: string): Promise<void>
+
+  createInvite(invite: OrganizationInviteRecord): Promise<OrganizationInviteRecord>
+  findInviteByTokenHash(hash: string): Promise<OrganizationInviteRecord | null>
+  listPendingInvites(organizationId: string): Promise<OrganizationInviteRecord[]>
+  markInviteAccepted(id: string, acceptedAt: string): Promise<void>
+  deleteInvite(id: string): Promise<void>
+}
+
 export interface Stores {
   users: UserStore
   sessions: SessionStore
@@ -423,6 +495,7 @@ export interface Stores {
   pushSubscriptions: PushSubscriptionStore
   billing: BillingStore
   workspaces: WorkspaceStore
+  organizations: OrganizationStore // Phase 18 P0: Multi-tenant billing boundary
   identityKeys: IdentityKeyStore
   workspaceKeys: WorkspaceKeyStore
   audit: AuditStore

@@ -10,6 +10,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "migrate": "tsx src/db/cli.ts",
+    "migrate:users": "tsx src/cli/migrateUsers.ts",
     "worker": "tsx src/worker.ts"
   },
   "dependencies": {

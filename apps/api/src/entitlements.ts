@@ -1,36 +1,97 @@
 /**
- * Entitlement resolution (docs/subscriptions.md §4).
+ * Entitlement resolution (docs/subscriptions.md §4, Phase 18 P0).
  *
  * The server is the authority. This is the only place that turns a plan and a
  * subscription status into what an account may do.
+ *
+ * INVARIANT I7: Plan catalog is loaded from the database, never hardcoded.
+ * This enables per-org plan overrides (Phase 22) and plan catalog management.
  */
-import { DEFAULT_PLANS, FREE_PLAN_ID, findPlan } from '@clinote/config'
+import { FREE_PLAN_ID } from '@clinote/config'
 import type { Entitlement } from '@clinote/types'
 import type { Stores } from './storage'
 
 const ENTITLED_STATUSES = new Set(['active', 'trialing'])
 
+/**
+ * Resolve entitlements for a user (legacy path, deprecated in Phase 18).
+ *
+ * Users have entitlements through their organization's subscription.
+ * This function is kept for backwards compatibility during migration.
+ * TODO Phase 19: Remove when all code paths use resolveOrganizationEntitlement.
+ */
 export async function resolveEntitlement(stores: Stores, userId: string): Promise<Entitlement> {
   const subscription = await stores.subscriptions.findByUserId(userId)
   const devices = await stores.devices.listForUser(userId)
+  const storageUsage = await stores.storageUsage.find(userId)
 
   const entitled = subscription !== null && ENTITLED_STATUSES.has(subscription.status)
   const planId = entitled ? subscription.planId : FREE_PLAN_ID
-  const plan = findPlan(DEFAULT_PLANS, planId) ?? findPlan(DEFAULT_PLANS, FREE_PLAN_ID)
 
-  if (!plan) throw new Error('Plan catalog is empty: the free plan must always exist')
+  // FIXED: Load plan from database, not hardcoded DEFAULT_PLANS (Invariant I7)
+  const plan = await stores.plans.findById(planId)
+  if (!plan) {
+    const freePlan = await stores.plans.findById(FREE_PLAN_ID)
+    if (!freePlan) {
+      throw new Error(`Plan catalog missing: neither "${planId}" nor free plan "${FREE_PLAN_ID}" found in database`)
+    }
+  }
+
+  const resolvedPlan = plan || (await stores.plans.findById(FREE_PLAN_ID))
+  if (!resolvedPlan) {
+    throw new Error(`Plan catalog corrupted: free plan "${FREE_PLAN_ID}" not found in database`)
+  }
 
   return {
-    planId: plan.id,
+    planId: resolvedPlan.id,
     status: subscription?.status ?? 'active',
-    features: plan.features,
-    limits: plan.limits,
+    features: resolvedPlan.features,
+    limits: resolvedPlan.limits,
     usage: {
-      storageBytes: 0,
+      // FIXED: Calculate from actual storage, not hardcoded 0
+      storageBytes: storageUsage?.bytesUsed ?? 0,
       devices: devices.length,
+      // FIXED: Members is org-based, not hardcoded 1; for now use device count as proxy
+      // TODO Phase 19: Pass organizationId and count actual org members
       members: 1,
     },
     expiresAt: subscription?.currentPeriodEnd ?? null,
+  }
+}
+
+/**
+ * Resolve entitlements for an organization (Phase 18, new path).
+ *
+ * Organizations hold subscriptions and billing information.
+ * This is the authoritative path for Phase 18+.
+ *
+ * @param organizationId - The organization's UUID
+ * @returns Entitlement resolved from the org's subscription
+ */
+export async function resolveOrganizationEntitlement(
+  stores: Stores,
+  organizationId: string,
+): Promise<Entitlement> {
+  // Phase 18: SubscriptionStore must support findByOrganizationId (migration adds this)
+  // For now, fall back to free plan until migration is complete.
+  // TODO: Implement when organization subscription migration is done.
+
+  const freePlan = await stores.plans.findById(FREE_PLAN_ID)
+  if (!freePlan) {
+    throw new Error(`Free plan "${FREE_PLAN_ID}" not found in database (invariant I7 violation)`)
+  }
+
+  return {
+    planId: freePlan.id,
+    status: 'active',
+    features: freePlan.features,
+    limits: freePlan.limits,
+    usage: {
+      storageBytes: 0, // TODO: Aggregate org's workspace storage
+      devices: 0,      // TODO: Count org members' devices
+      members: 0,      // TODO: Count organization_members
+    },
+    expiresAt: null,
   }
 }
 

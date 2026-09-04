@@ -47,6 +47,10 @@ import type {
   UserKeysStore,
   UserRecord,
   UserStore,
+  OrganizationRecord,
+  OrganizationMemberRecord,
+  OrganizationInviteRecord,
+  OrganizationStore,
 } from './ports'
 
 export function createMemoryStores(): Stores {
@@ -77,6 +81,9 @@ export function createMemoryStores(): Stores {
       const next = { ...current, ...patch, updatedAt: new Date().toISOString() }
       users.set(id, next)
       return { ...next }
+    },
+    async listAll() {
+      return [...users.values()].filter((u) => !u.deletedAt).map((u) => ({ ...u }))
     },
   }
 
@@ -160,13 +167,24 @@ export function createMemoryStores(): Stores {
     },
   }
 
+  const subscriptionsByOrg = new Map<string, SubscriptionRecord>() // Phase 18: Org-based subscriptions
   const subscriptionStore: SubscriptionStore = {
     async findByUserId(userId) {
       const subscription = subscriptions.get(userId)
       return subscription ? { ...subscription } : null
     },
+    async findByOrganizationId(organizationId) {
+      const subscription = subscriptionsByOrg.get(organizationId)
+      return subscription ? { ...subscription } : null
+    },
     async upsert(subscription) {
-      subscriptions.set(subscription.userId, { ...subscription })
+      // Store by both userId (legacy) and organizationId (Phase 18+)
+      if (subscription.userId) {
+        subscriptions.set(subscription.userId, { ...subscription })
+      }
+      if (subscription.organizationId) {
+        subscriptionsByOrg.set(subscription.organizationId, { ...subscription })
+      }
       return { ...subscription }
     },
   }
@@ -446,6 +464,10 @@ export function createMemoryStores(): Stores {
       if (current) workspaces.set(id, { ...current, deletedAt })
     },
 
+    async listAll() {
+      return [...workspaces.values()].filter((w) => !w.deletedAt).map((w) => ({ ...w }))
+    },
+
     async listMembers(workspaceId) {
       return [...members.values()]
         .filter((member) => member.workspaceId === workspaceId)
@@ -572,6 +594,113 @@ export function createMemoryStores(): Stores {
     },
   }
 
+  // Phase 18 P0: Organizations
+  const organizations = new Map<string, OrganizationRecord>()
+  const orgMembers = new Map<string, OrganizationMemberRecord>()
+  const orgInvites = new Map<string, OrganizationInviteRecord>()
+  const orgMemberKey = (orgId: string, userId: string) => `${orgId}:${userId}`
+
+  const organizationStore: OrganizationStore = {
+    async create(org) {
+      organizations.set(org.id, { ...org })
+      return { ...org }
+    },
+
+    async findById(id) {
+      const found = organizations.get(id)
+      return found && !found.deletedAt ? { ...found } : null
+    },
+
+    async findBySlug(slug) {
+      for (const org of organizations.values()) {
+        if (org.slug === slug && !org.deletedAt) return { ...org }
+      }
+      return null
+    },
+
+    async findByCustomDomain(domain) {
+      for (const org of organizations.values()) {
+        if (org.customDomain === domain && !org.deletedAt) return { ...org }
+      }
+      return null
+    },
+
+    async listForUser(userId) {
+      return [...orgMembers.values()]
+        .filter((member) => member.userId === userId)
+        .flatMap((member) => {
+          const org = organizations.get(member.organizationId)
+          if (!org || org.deletedAt) return []
+          return [{ ...org }]
+        })
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    },
+
+    async update(id, patch) {
+      const current = organizations.get(id)
+      if (!current) throw new Error(`Unknown organization: ${id}`)
+      const next = { ...current, ...patch }
+      organizations.set(id, next)
+      return { ...next }
+    },
+
+    async softDelete(id, deletedAt) {
+      const current = organizations.get(id)
+      if (current) organizations.set(id, { ...current, deletedAt })
+    },
+
+    async listMembers(organizationId) {
+      return [...orgMembers.values()]
+        .filter((member) => member.organizationId === organizationId)
+        .map((member) => ({ ...member }))
+    },
+
+    async findMember(organizationId, userId) {
+      const found = orgMembers.get(orgMemberKey(organizationId, userId))
+      return found ? { ...found } : null
+    },
+
+    async countMembers(organizationId) {
+      return [...orgMembers.values()].filter((member) => member.organizationId === organizationId).length
+    },
+
+    async putMember(member) {
+      orgMembers.set(orgMemberKey(member.organizationId, member.userId), { ...member })
+      return { ...member }
+    },
+
+    async removeMember(organizationId, userId) {
+      orgMembers.delete(orgMemberKey(organizationId, userId))
+    },
+
+    async createInvite(invite) {
+      orgInvites.set(invite.id, { ...invite })
+      return { ...invite }
+    },
+
+    async findInviteByTokenHash(hash) {
+      for (const invite of orgInvites.values()) {
+        if (invite.tokenHash === hash) return { ...invite }
+      }
+      return null
+    },
+
+    async listPendingInvites(organizationId) {
+      return [...orgInvites.values()]
+        .filter((invite) => invite.organizationId === organizationId && !invite.acceptedAt)
+        .map((invite) => ({ ...invite }))
+    },
+
+    async markInviteAccepted(id, acceptedAt) {
+      const current = orgInvites.get(id)
+      if (current) orgInvites.set(id, { ...current, acceptedAt })
+    },
+
+    async deleteInvite(id) {
+      orgInvites.delete(id)
+    },
+  }
+
   return {
     users: userStore,
     sessions: sessionStore,
@@ -588,6 +717,7 @@ export function createMemoryStores(): Stores {
     pushSubscriptions: pushStore,
     billing: billingStore,
     workspaces: workspaceStore,
+    organizations: organizationStore,
     identityKeys: identityKeyStore,
     workspaceKeys: workspaceKeyStore,
     audit: auditStore,

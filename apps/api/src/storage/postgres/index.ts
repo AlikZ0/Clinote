@@ -54,6 +54,10 @@ import type {
   UserKeysStore,
   UserRecord,
   UserStore,
+  OrganizationRecord,
+  OrganizationMemberRecord,
+  OrganizationInviteRecord,
+  OrganizationStore,
 } from '../ports'
 
 interface UserRow {
@@ -158,6 +162,13 @@ export function createPostgresStores(sql: Sql): Stores {
       )
       if (!rows[0]) throw new Error(`Unknown user ${id}`)
       return toUser(rows[0])
+    },
+
+    async listAll() {
+      const { rows } = await sql.query<UserRow>(
+        'SELECT * FROM users WHERE deleted_at IS NULL ORDER BY created_at ASC',
+      )
+      return rows.map(toUser)
     },
   }
 
@@ -341,19 +352,48 @@ export function createPostgresStores(sql: Sql): Stores {
   const subscriptions: SubscriptionStore = {
     async findByUserId(userId) {
       const { rows } = await sql.query<{
-        user_id: string
+        id: string
+        user_id: string | null
+        organization_id: string | null
         plan_id: string
         status: string
         current_period_end: string | null
       }>(
-        'SELECT user_id, plan_id, status, current_period_end FROM subscriptions WHERE user_id = $1',
+        'SELECT id, user_id, organization_id, plan_id, status, current_period_end FROM subscriptions WHERE user_id = $1',
         [userId],
       )
 
       const row = rows[0]
       if (!row) return null
       return {
+        id: row.id,
         userId: row.user_id,
+        organizationId: row.organization_id,
+        planId: row.plan_id,
+        status: row.status as SubscriptionRecord['status'],
+        currentPeriodEnd: row.current_period_end,
+      }
+    },
+
+    async findByOrganizationId(organizationId) {
+      const { rows } = await sql.query<{
+        id: string
+        user_id: string | null
+        organization_id: string | null
+        plan_id: string
+        status: string
+        current_period_end: string | null
+      }>(
+        'SELECT id, user_id, organization_id, plan_id, status, current_period_end FROM subscriptions WHERE organization_id = $1',
+        [organizationId],
+      )
+
+      const row = rows[0]
+      if (!row) return null
+      return {
+        id: row.id,
+        userId: row.user_id,
+        organizationId: row.organization_id,
         planId: row.plan_id,
         status: row.status as SubscriptionRecord['status'],
         currentPeriodEnd: row.current_period_end,
@@ -361,22 +401,26 @@ export function createPostgresStores(sql: Sql): Stores {
     },
 
     async upsert(subscription) {
+      // Insert with id (must be provided by caller for idempotency)
+      const subId = subscription.id || randomUUID()
       await sql.query(
-        `INSERT INTO subscriptions (id, user_id, plan_id, status, current_period_end)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4)
-         ON CONFLICT (user_id) DO UPDATE
+        `INSERT INTO subscriptions (id, user_id, organization_id, plan_id, status, current_period_end)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (id) DO UPDATE
            SET plan_id = EXCLUDED.plan_id,
                status = EXCLUDED.status,
                current_period_end = EXCLUDED.current_period_end,
                updated_at = now()`,
         [
-          subscription.userId,
+          subId,
+          subscription.userId ?? null,
+          subscription.organizationId ?? null,
           subscription.planId,
           subscription.status,
           subscription.currentPeriodEnd,
         ],
       )
-      return subscription
+      return { ...subscription, id: subId }
     },
   }
 
@@ -996,6 +1040,7 @@ export function createPostgresStores(sql: Sql): Stores {
     id: string
     owner_user_id: string
     name: string
+    organization_id: string | null // Phase 18+: Link to billing boundary
     created_at: string
     updated_at: string
     deleted_at: string | null
@@ -1005,6 +1050,7 @@ export function createPostgresStores(sql: Sql): Stores {
     id: row.id,
     ownerUserId: row.owner_user_id,
     name: row.name,
+    organizationId: row.organization_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -1053,13 +1099,14 @@ export function createPostgresStores(sql: Sql): Stores {
   const workspaces: WorkspaceStore = {
     async create(workspace) {
       const { rows } = await sql.query<WorkspaceRow>(
-        `INSERT INTO workspaces (id, owner_user_id, name, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO workspaces (id, owner_user_id, name, organization_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
         [
           workspace.id,
           workspace.ownerUserId,
           workspace.name,
+          workspace.organizationId ?? null,
           workspace.createdAt,
           workspace.updatedAt,
         ],
@@ -1087,12 +1134,21 @@ export function createPostgresStores(sql: Sql): Stores {
     },
 
     async update(id, patch) {
+      const assignments: string[] = ['updated_at = now()']
+      const values: unknown[] = [id]
+
+      if ('name' in patch) {
+        values.push(patch.name)
+        assignments.push(`name = $${values.length}`)
+      }
+      if ('organizationId' in patch) {
+        values.push(patch.organizationId ?? null)
+        assignments.push(`organization_id = $${values.length}`)
+      }
+
       const { rows } = await sql.query<WorkspaceRow>(
-        `UPDATE workspaces
-            SET name = coalesce($2, name), updated_at = now()
-          WHERE id = $1
-          RETURNING *`,
-        [id, patch.name ?? null],
+        `UPDATE workspaces SET ${assignments.join(', ')} WHERE id = $1 RETURNING *`,
+        values,
       )
       if (!rows[0]) throw new Error(`Unknown workspace: ${id}`)
       return toWorkspace(rows[0])
@@ -1100,6 +1156,13 @@ export function createPostgresStores(sql: Sql): Stores {
 
     async softDelete(id, deletedAt) {
       await sql.query('UPDATE workspaces SET deleted_at = $2 WHERE id = $1', [id, deletedAt])
+    },
+
+    async listAll() {
+      const { rows } = await sql.query<WorkspaceRow>(
+        'SELECT * FROM workspaces WHERE deleted_at IS NULL ORDER BY created_at ASC',
+      )
+      return rows.map(toWorkspace)
     },
 
     async listMembers(workspaceId) {
@@ -1357,6 +1420,252 @@ export function createPostgresStores(sql: Sql): Stores {
     },
   }
 
+  // Phase 18 P0: Organizations
+  interface OrganizationRow {
+    id: string
+    name: string
+    slug: string
+    owner_user_id: string
+    logo_url: string | null
+    primary_color: string | null
+    secondary_color: string | null
+    custom_domain: string | null
+    settings: unknown
+    created_at: string
+    updated_at: string
+    deleted_at: string | null
+  }
+
+  function toOrganization(row: OrganizationRow): OrganizationRecord {
+    return {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      ownerUserId: row.owner_user_id,
+      logoUrl: row.logo_url,
+      primaryColor: row.primary_color,
+      secondaryColor: row.secondary_color,
+      customDomain: row.custom_domain,
+      settings: row.settings,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      deletedAt: row.deleted_at,
+    }
+  }
+
+  interface OrgMemberRow {
+    organization_id: string
+    user_id: string
+    role: string
+    invited_at: string
+    joined_at: string | null
+  }
+
+  function toOrgMember(row: OrgMemberRow): OrganizationMemberRecord {
+    return {
+      organizationId: row.organization_id,
+      userId: row.user_id,
+      role: row.role as OrganizationMemberRecord['role'],
+      invitedAt: row.invited_at,
+      joinedAt: row.joined_at,
+    }
+  }
+
+  interface OrgInviteRow {
+    id: string
+    organization_id: string
+    email: string
+    role: string
+    token_hash: string
+    invited_by: string | null
+    expires_at: string
+    accepted_at: string | null
+    created_at: string
+  }
+
+  function toOrgInvite(row: OrgInviteRow): OrganizationInviteRecord {
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      email: row.email,
+      role: row.role as OrganizationInviteRecord['role'],
+      tokenHash: row.token_hash,
+      invitedBy: row.invited_by,
+      expiresAt: row.expires_at,
+      acceptedAt: row.accepted_at,
+      createdAt: row.created_at,
+    }
+  }
+
+  const organizations: OrganizationStore = {
+    async create(org) {
+      const { rows } = await sql.query<OrganizationRow>(
+        `INSERT INTO organizations (id, name, slug, owner_user_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [org.id, org.name, org.slug, org.ownerUserId, org.createdAt, org.updatedAt],
+      )
+      return toOrganization(rows[0]!)
+    },
+
+    async findById(id) {
+      const { rows } = await sql.query<OrganizationRow>(
+        'SELECT * FROM organizations WHERE id = $1 AND deleted_at IS NULL',
+        [id],
+      )
+      return rows[0] ? toOrganization(rows[0]) : null
+    },
+
+    async findBySlug(slug) {
+      const { rows } = await sql.query<OrganizationRow>(
+        'SELECT * FROM organizations WHERE slug = $1 AND deleted_at IS NULL',
+        [slug],
+      )
+      return rows[0] ? toOrganization(rows[0]) : null
+    },
+
+    async findByCustomDomain(domain) {
+      const { rows } = await sql.query<OrganizationRow>(
+        'SELECT * FROM organizations WHERE custom_domain = $1 AND deleted_at IS NULL',
+        [domain],
+      )
+      return rows[0] ? toOrganization(rows[0]) : null
+    },
+
+    async listForUser(userId) {
+      const { rows } = await sql.query<OrganizationRow>(
+        `SELECT o.* FROM organizations o
+         JOIN organization_members m ON m.organization_id = o.id
+         WHERE m.user_id = $1 AND o.deleted_at IS NULL
+         ORDER BY o.created_at`,
+        [userId],
+      )
+      return rows.map(toOrganization)
+    },
+
+    async update(id, patch) {
+      const { rows } = await sql.query<OrganizationRow>(
+        `UPDATE organizations
+            SET name = coalesce($2, name),
+                logo_url = coalesce($3::text, logo_url),
+                primary_color = coalesce($4::text, primary_color),
+                secondary_color = coalesce($5::text, secondary_color),
+                custom_domain = coalesce($6::text, custom_domain),
+                settings = coalesce($7::jsonb, settings),
+                updated_at = now()
+          WHERE id = $1
+          RETURNING *`,
+        [
+          id,
+          patch.name ?? null,
+          patch.logoUrl ?? null,
+          patch.primaryColor ?? null,
+          patch.secondaryColor ?? null,
+          patch.customDomain ?? null,
+          patch.settings ? JSON.stringify(patch.settings) : null,
+        ],
+      )
+      if (!rows[0]) throw new Error(`Unknown organization: ${id}`)
+      return toOrganization(rows[0])
+    },
+
+    async softDelete(id, deletedAt) {
+      await sql.query('UPDATE organizations SET deleted_at = $2 WHERE id = $1', [id, deletedAt])
+    },
+
+    async listMembers(organizationId) {
+      const { rows } = await sql.query<OrgMemberRow>(
+        'SELECT * FROM organization_members WHERE organization_id = $1 ORDER BY invited_at',
+        [organizationId],
+      )
+      return rows.map(toOrgMember)
+    },
+
+    async findMember(organizationId, userId) {
+      const { rows } = await sql.query<OrgMemberRow>(
+        'SELECT * FROM organization_members WHERE organization_id = $1 AND user_id = $2',
+        [organizationId, userId],
+      )
+      return rows[0] ? toOrgMember(rows[0]) : null
+    },
+
+    async countMembers(organizationId) {
+      const { rows } = await sql.query<{ count: string }>(
+        'SELECT count(*) AS count FROM organization_members WHERE organization_id = $1',
+        [organizationId],
+      )
+      return Number(rows[0]?.count ?? 0)
+    },
+
+    async putMember(member) {
+      const { rows } = await sql.query<OrgMemberRow>(
+        `INSERT INTO organization_members (organization_id, user_id, role, invited_at, joined_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (organization_id, user_id) DO UPDATE
+           SET role = EXCLUDED.role, joined_at = EXCLUDED.joined_at
+         RETURNING *`,
+        [member.organizationId, member.userId, member.role, member.invitedAt, member.joinedAt],
+      )
+      return toOrgMember(rows[0]!)
+    },
+
+    async removeMember(organizationId, userId) {
+      await sql.query('DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2', [
+        organizationId,
+        userId,
+      ])
+    },
+
+    async createInvite(invite) {
+      const { rows } = await sql.query<OrgInviteRow>(
+        `INSERT INTO organization_invites (id, organization_id, email, role, token_hash, invited_by,
+                                           expires_at, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [
+          invite.id,
+          invite.organizationId,
+          invite.email,
+          invite.role,
+          invite.tokenHash,
+          invite.invitedBy,
+          invite.expiresAt,
+          invite.createdAt,
+        ],
+      )
+      return toOrgInvite(rows[0]!)
+    },
+
+    async findInviteByTokenHash(hash) {
+      const { rows } = await sql.query<OrgInviteRow>(
+        'SELECT * FROM organization_invites WHERE token_hash = $1',
+        [hash],
+      )
+      return rows[0] ? toOrgInvite(rows[0]) : null
+    },
+
+    async listPendingInvites(organizationId) {
+      const { rows } = await sql.query<OrgInviteRow>(
+        `SELECT * FROM organization_invites
+         WHERE organization_id = $1 AND accepted_at IS NULL
+         ORDER BY created_at`,
+        [organizationId],
+      )
+      return rows.map(toOrgInvite)
+    },
+
+    async markInviteAccepted(id, acceptedAt) {
+      await sql.query('UPDATE organization_invites SET accepted_at = $2 WHERE id = $1', [
+        id,
+        acceptedAt,
+      ])
+    },
+
+    async deleteInvite(id) {
+      await sql.query('DELETE FROM organization_invites WHERE id = $1', [id])
+    },
+  }
+
   return {
     users,
     sessions,
@@ -1373,6 +1682,7 @@ export function createPostgresStores(sql: Sql): Stores {
     pushSubscriptions,
     billing,
     workspaces,
+    organizations,
     identityKeys,
     workspaceKeys,
     audit,
