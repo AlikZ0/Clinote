@@ -77,7 +77,12 @@ jobs:
 
       - name: Create the backup bucket
         run: |
-          docker run --rm --network host minio/mc:latest /bin/sh -c "
+          # The image's entrypoint is mc itself, so a shell has to be asked for
+          # explicitly — otherwise `/bin/sh` arrives as an argument to mc and it
+          # rejects it as an unknown command. Two `docker run`s cannot replace
+          # the shell here: the alias mc writes in the first would be gone with
+          # the container before the second could use it.
+          docker run --rm --network host --entrypoint /bin/sh minio/mc:latest -c "
             mc alias set ci http://127.0.0.1:9100 clinote clinote-secret &&
             mc mb --ignore-existing ci/clinote-backups
           "
